@@ -1,8 +1,9 @@
-name = "AWSMQTT"
+name = "AWSCRT"
 uuid = "df31ea59-17a4-4ebd-9d69-4f45266dc2c7"
 version = "0.1.0"
 
 [deps]
+AWSCRT_jll = "01db5350-6ea1-5d9a-9a47-8a31a394cb9c"
 LibAWSCRT = "df7458b6-5204-493f-a0e7-404b4eb72fac"
 
 [compat]

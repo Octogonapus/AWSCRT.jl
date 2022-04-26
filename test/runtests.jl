@@ -1,4 +1,7 @@
-using Test
+ENV["AWS_CRT_MEMORY_TRACING"] = "1"
 
-@testset "AWSMQTT" begin
+using Test
+using AWSCRT, LibAWSCRT
+
+@testset "AWSCRT" begin
 end

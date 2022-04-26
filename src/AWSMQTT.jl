@@ -1,19 +1,4 @@
-"""
-Key resources:
-- Connection
-
-Key actions:
-- connect(connection)
-- disconnect(connection)
-- subscribe(connection, topic, qos, callback)
-- unsubscribe(connection, topic)
-- on_message(connection, callback)
-"""
-module AWSMQTT
-
-using LibAWSCRT
-
-struct Client
+mutable struct Client
 
     """
     MQTT client.
@@ -56,7 +41,7 @@ on_message(
 """
 const OnMessage = Function
 
-struct Connection
+mutable struct Connection
 
     """
     MQTT client connection.
@@ -212,5 +197,3 @@ If unsuccessful, the task will contain an exception.
 """
 publish(connection::Connection, topic::AbstractString, payload, qos::aws_mqtt_qos, retain::Bool = false) =
     error("Not implemented.")
-
-end
