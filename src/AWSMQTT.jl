@@ -196,7 +196,7 @@ function connect(
             elseif msg.error_code != AWS_ERROR_SUCCESS
                 ErrorException("Connection failed. error_code=$(msg.error_code) $(aws_err_string(msg.error_code))")
             else
-                Dict(:session_present => msg.session_present)
+                Dict(:session_present => msg.session_present != 0)
             end
             put!(ch, result)
         end
@@ -227,7 +227,7 @@ function connect(
                 error("Failed to connect. $(aws_err_string())")
             end
 
-            out = @async begin
+            return @async begin
                 GC.@preserve connection conn_options on_connection_complete_fcb on_connection_complete_token begin
                     result = take!(ch)
                     if result isa Exception
@@ -237,12 +237,20 @@ function connect(
                     end
                 end
             end
-
-            return out
         end
     finally
         tls_connection_options !== nothing && aws_tls_connection_options_clean_up(tls_connection_options.ptr)
     end
+end
+
+function on_disconnect_complete(
+    connection::Ptr{aws_mqtt_client_connection},
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+    ForeignCallbacks.notify!(token, nothing)
+    return nothing
 end
 
 """
@@ -250,8 +258,25 @@ end
 
 Close the connection to the server (async).
 Returns a task which completes when the connection is closed.
+The task will contain nothing.
 """
-disconnect(connection::Connection) = error("Not implemented.")
+function disconnect(connection::Connection)
+    latch = CountDownLatch(1)
+    on_disconnect_complete_fcb = ForeignCallbacks.ForeignCallback{Nothing}() do _
+        count_down(latch)
+    end
+    on_disconnect_complete_token = Ref(ForeignCallbacks.ForeignToken(on_disconnect_complete_fcb))
+    on_disconnect_complete_cb = @cfunction(on_disconnect_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Ptr{Cvoid}))
+    GC.@preserve connection on_disconnect_complete_fcb on_disconnect_complete_token begin
+        aws_mqtt_client_connection_disconnect(connection.ptr, on_disconnect_complete_cb, on_disconnect_complete_token)
+        return @async begin
+            GC.@preserve connection on_disconnect_complete_fcb on_disconnect_complete_token begin
+                await(latch)
+                return nothing
+            end
+        end
+    end
+end
 
 """
     subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)

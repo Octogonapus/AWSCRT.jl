@@ -23,5 +23,8 @@ using AWSCRT, LibAWSCRT
         "test-client-id2";
         will = Will(topic, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
     )
-    @show fetch(task)
+    @test fetch(task) == Dict(:session_present => false)
+
+    task = disconnect(connection)
+    @test fetch(task) === nothing
 end

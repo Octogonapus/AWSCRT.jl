@@ -18,7 +18,10 @@ function __init__()
             level = parse(Int, strip(level))
             level = aws_mem_trace_level(level)
             if Symbol(level) == :UnknownMember
-                error("Invalid value for env var AWS_CRT_MEMORY_TRACING. " * "See aws_mem_trace_level docs for valid values.")
+                error(
+                    "Invalid value for env var AWS_CRT_MEMORY_TRACING. " *
+                    "See aws_mem_trace_level docs for valid values.",
+                )
             end
             frames_per_stack = parse(Int, strip(get(ENV, "AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK", "0")))
             aws_mem_tracer_new(aws_default_allocator(), C_NULL, level, frames_per_stack)
@@ -26,7 +29,7 @@ function __init__()
             aws_default_allocator()
         end
     end
-    
+
     let log_level = get(ENV, "AWS_CRT_LOG_LEVEL", "")
         if !isempty(log_level)
             log_level = parse(Int, strip(log_level))
@@ -45,24 +48,34 @@ function __init__()
             logger = Ref(aws_logger(C_NULL, C_NULL, C_NULL))
             push!(_GLOBAL_REFS, logger)
 
-            logger_options = Ref(
-                aws_logger_standard_options(
-                    log_level,
-                    Base.unsafe_convert(Ptr{Cchar}, log_path[]),
-                    C_NULL,
-                ),
-            )
+            logger_options =
+                Ref(aws_logger_standard_options(log_level, Base.unsafe_convert(Ptr{Cchar}, log_path[]), C_NULL))
             push!(_GLOBAL_REFS, logger_options)
 
             aws_logger_init_standard(logger, _AWSCRT_ALLOCATOR[], logger_options)
             aws_logger_set(logger)
         end
     end
-    
-    aws_io_library_init(_AWSCRT_ALLOCATOR[])
-    aws_mqtt_library_init(_AWSCRT_ALLOCATOR[])
+
+    aws_mqtt_library_init(_AWSCRT_ALLOCATOR[]) # also does io and http
 
     # TODO try cleanup using this approach https://github.com/JuliaLang/julia/pull/20124/files
+end
+
+function _release(; include_mem_tracer = isempty(get(ENV, "AWS_CRT_MEMORY_TRACING", "")))
+    aws_thread_set_managed_join_timeout_ns(5e8) # 0.5 seconds
+
+    i = findfirst(x -> x isa Ref{aws_logger}, _GLOBAL_REFS)
+    if i !== nothing
+        aws_logger_clean_up(_GLOBAL_REFS[i])
+    end
+
+    aws_mqtt_library_clean_up() # also does io and http
+    empty!(_GLOBAL_REFS)
+    if include_mem_tracer
+        aws_mem_tracer_destroy(_AWSCRT_ALLOCATOR[])
+    end
+    return nothing
 end
 
 aws_err_string(code = aws_last_error()) = "AWS Error $code: " * Base.unsafe_string(aws_error_debug_str(code))
