@@ -14,13 +14,13 @@ using AWSCRT, LibAWSCRT
         alpn_list = ["x-amzn-mqtt-ca"],
     )
     tls_ctx = ClientTLSContext(tls_ctx_options)
-    client = Client()
+    client = Client(; tls_ctx)
     connection = Connection(client)
     task = connect(
         connection,
         ENV["ENDPOINT"],
         8883,
-        "test-client-id";
+        "test-client-id2";
         will = Will(topic, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
     )
     @show fetch(task)
