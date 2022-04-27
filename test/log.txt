@@ -1,0 +1,376 @@
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [aws-c-common] - static: libnuma.so failed to load
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [libcrypto_resolve] - searching process and loaded modules
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [libcrypto_resolve] - found static aws-lc HMAC symbols
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [libcrypto_resolve] - found static aws-lc libcrypto 1.1.1 EVP_MD symbols
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [tls-handler] - static: Initializing TLS using s2n.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [tls-handler] - ctx: Based on OS, we detected the default PKI path as /etc/ssl/certs, and ca file as /etc/pki/tls/certs/ca-bundle.crt
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [tls-handler] - ctx: Certificate and key have been set, setting them up now.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [tls-handler] - ctx: Setting ALPN list x-amzn-mqtt-ca
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2cad880: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2cad880: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2cad880: eventfd descriptor 29.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2cad880: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x22ad880: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x22ad880: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x22ad880: eventfd descriptor 31.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x22ad880: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2dfef30: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2dfef30: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2dfef30: eventfd descriptor 33.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e50afc640] [event-loop] - id=0x2cad880: main loop started
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e50afc640] [event-loop] - id=0x2cad880: subscribing to events on fd 29
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2dfef30: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e50afc640] [event-loop] - id=0x2cad880: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e50afc640] [event-loop] - id=0x2cad880: waiting for a maximum of 100000 ms
+[INFO] [2022-04-27T20:39:40Z] [00007f2e47ffb640] [event-loop] - id=0x22ad880: main loop started
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e47ffb640] [event-loop] - id=0x22ad880: subscribing to events on fd 31
+[INFO] [2022-04-27T20:39:40Z] [00007f2e47ffb640] [event-loop] - id=0x22ad880: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e47ffb640] [event-loop] - id=0x22ad880: waiting for a maximum of 100000 ms
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2deb6f0: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2deb6f0: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2deb6f0: eventfd descriptor 35.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2deb6f0: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e477fa640] [event-loop] - id=0x2dfef30: main loop started
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2264680: Initializing edge-triggered epoll
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e477fa640] [event-loop] - id=0x2dfef30: subscribing to events on fd 33
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2264680: Using eventfd for cross-thread notifications.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e477fa640] [event-loop] - id=0x2dfef30: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e477fa640] [event-loop] - id=0x2dfef30: waiting for a maximum of 100000 ms
+[INFO] [2022-04-27T20:39:40Z] [00007f2e46ff9640] [event-loop] - id=0x2deb6f0: main loop started
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e46ff9640] [event-loop] - id=0x2deb6f0: subscribing to events on fd 35
+[INFO] [2022-04-27T20:39:40Z] [00007f2e46ff9640] [event-loop] - id=0x2deb6f0: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e46ff9640] [event-loop] - id=0x2deb6f0: waiting for a maximum of 100000 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2264680: eventfd descriptor 37.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2264680: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e39730: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e39730: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e39730: eventfd descriptor 53.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e39730: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e467f8640] [event-loop] - id=0x2264680: main loop started
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e467f8640] [event-loop] - id=0x2264680: subscribing to events on fd 37
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2a42ce0: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2a42ce0: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2a42ce0: eventfd descriptor 58.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e467f8640] [event-loop] - id=0x2264680: default timeout 100000, and max events to process per tick 100
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2a42ce0: Starting event-loop thread.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e467f8640] [event-loop] - id=0x2264680: waiting for a maximum of 100000 ms
+[INFO] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: main loop started
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: subscribing to events on fd 53
+[INFO] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 100000 ms
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e70f10: Initializing edge-triggered epoll
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e70f10: Using eventfd for cross-thread notifications.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e70f10: eventfd descriptor 60.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [event-loop] - id=0x2e70f10: Starting event-loop thread.
+[INFO] [2022-04-27T20:39:40Z] [00007f2e457f6640] [event-loop] - id=0x2a42ce0: main loop started
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [dns] - id=0x2dff990: Initializing default host resolver with 16 max host entries.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e457f6640] [event-loop] - id=0x2a42ce0: subscribing to events on fd 58
+[INFO] [2022-04-27T20:39:40Z] [00007f2e457f6640] [event-loop] - id=0x2a42ce0: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e457f6640] [event-loop] - id=0x2a42ce0: waiting for a maximum of 100000 ms
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [channel-bootstrap] - id=0x267b3b0: Initializing client bootstrap with event-loop group 0x2e250d0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - client=0x2d06d60: Initalizing MQTT client
+[INFO] [2022-04-27T20:39:40Z] [00007f2e44ff5640] [event-loop] - id=0x2e70f10: main loop started
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e44ff5640] [event-loop] - id=0x2e70f10: subscribing to events on fd 60
+[INFO] [2022-04-27T20:39:40Z] [00007f2e44ff5640] [event-loop] - id=0x2e70f10: default timeout 100000, and max events to process per tick 100
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e44ff5640] [event-loop] - id=0x2e70f10: waiting for a maximum of 100000 ms
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: Creating new connection
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-topic-tree] - tree=0x2e46758: Creating new topic tree
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: Setting reconnect timeouts min: 5 max: 60
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: Setting last will with topic "test-topic"
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: Opening connection
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: Begin connecting process, switch state to CONNECTING.
+[INFO] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: using ping timeout of 3000000000 ns
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [mqtt-client] - id=0x2e464f0: a clean session connection requested, all the previous requests will fail
+[TRACE] [2022-04-27T20:39:40Z] [00007f2eba285b80] [channel-bootstrap] - id=0x267b3b0: attempting to initialize a new client channel to a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com:8883
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [dns] - id=0x2dff990: Host resolution requested for a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2eba285b80] [dns] - id=0x2dff990: No cached entries found for a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com starting new resolver thread.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolving host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::3657:44f4
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::3dd:71e3
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::2cc3:8d83
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::22ca:6c0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::3404:95e4
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::6b17:d217
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::36d3:e53b
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 2406:da00:ff00::3436:1abe
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 54.80.57.113
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 34.237.100.209
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 34.228.126.172
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 54.175.251.143
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 52.86.198.215
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 54.82.152.60
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 34.193.30.8
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: resolved record: 52.54.123.197
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static, resolving host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com successful, returned 16 addresses
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::3657:44f4 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::3dd:71e3 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::2cc3:8d83 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::22ca:6c0 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::3404:95e4 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::6b17:d217 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::36d3:e53b for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 2406:da00:ff00::3436:1abe for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 54.80.57.113 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 34.237.100.209 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 34.228.126.172 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 54.175.251.143 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 52.86.198.215 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 54.82.152.60 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 34.193.30.8 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: new address resolved 52.54.123.197 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com caching
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: remaining record count for host 8
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: remaining record count for host 8
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: vending address 2406:da00:ff00::3657:44f4 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com to caller
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static: vending address 54.80.57.113 for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com to caller
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e27fff640] [dns] - static, invoking resolution callback for host a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com with 2 addresses
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [channel-bootstrap] - id=0x267b3b0: dns resolution completed. Kicking off connections on 2 addresses. First one back wins.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [event-loop] - id=0x2e39730: Scheduling task 0x7f2e1c008290 cross-thread for timestamp 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [event-loop] - id=0x2e39730: Waking up event-loop thread
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e27fff640] [event-loop] - id=0x2e39730: Scheduling task 0x7f2e1c008750 cross-thread for timestamp 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 53, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: notified of cross-thread tasks to schedule
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: processing cross-thread tasks
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: task 0x7f2e1c008290 pulled to event-loop, scheduling now.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e1c008290: Scheduling attempt_connection task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: task 0x7f2e1c008750 pulled to event-loop, scheduling now.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e1c008750: Scheduling attempt_connection task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e1c008290: Running attempt_connection task with <Running> status
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: initializing with domain 1 and type 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: setting socket options to: keep-alive 0, keep idle 0, keep-alive interval 0, keep-alive probe count 0.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: beginning connect.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: connecting to endpoint 2406:da00:ff00::3657:44f4:8883.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: connection pending waiting on event-loop notification or timeout.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: subscribing to events on fd 62
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: scheduling timeout task for 27538663512245.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28001300 in-thread for timestamp 27538663512245
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001300: Scheduling (null) task for future execution at time 27538663512245
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e1c008750: Running attempt_connection task with <Running> status
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: initializing with domain 0 and type 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: setting socket options to: keep-alive 0, keep idle 0, keep-alive interval 0, keep-alive probe count 0.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: beginning connect.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: connecting to endpoint 54.80.57.113:8883.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: connection pending waiting on event-loop notification or timeout.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: subscribing to events on fd 63
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: scheduling timeout task for 27538663591503.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28000f90 in-thread for timestamp 27538663591503
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28000f90: Scheduling (null) task for future execution at time 27538663591503
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4999903713, using timeout of 4999.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4999 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - fd=62: connection activity handler triggered 
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: has not timed out yet proceeding with connection.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: un-subscribing from events on fd 62
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e280014a0 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e280014a0: Scheduling epoll_event_loop_unsubscribe_cleanup task for immediate execution
+[INFO] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: connection success
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd 62: local endpoint 2601:191:300:56::4cd:56186
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: assigning to event loop 0x2e39730
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: subscribing to events on fd 62
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: client connection on socket 0x7f2e28001060 completed with error 0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: Successful connection, creating a new channel using socket 0x7f2e28001060.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: Beginning creation and setup of new channel.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28001de0 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001de0: Scheduling on_channel_setup_complete task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e280014a0: Running epoll_event_loop_unsubscribe_cleanup task with <Running> status
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001de0: Running on_channel_setup_complete task with <Running> status
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: setup complete, notifying caller.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: no message pool is currently stored in the event-loop local storage, adding 0x7f2e28001cc0 with max message size 16384, message count 4, with 4 small blocks of 128 bytes.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: channel 0x7f2e28002070 setup succeeded: bootstrapping.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: creating new slot 0x7f2e28012760.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: Socket handler created with max_read_size of 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] -  id=0x7f2e28001060 fd=62: subscribing to readable events
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: Setting up socket handler on channel 0x7f2e28002070 with handler 0x7f2e28012e40 on slot 0x7f2e28012760.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: creating new slot 0x7f2e28002370.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: Setting up client TLS on channel 0x7f2e28002070 with handler 0x7f2e280130d0 on slot 0x7f2e28002370
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [tls-handler] - id=0x7f2e280130d0: Kicking off TLS negotiation.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: scheduling task with wrapper task id 0x7f2e28013100.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28013100 in-thread for timestamp 27543685731802
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28013100: Scheduling tls_timeout task for future execution at time 27543685731802
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800e6c0 of capacity 334 from pool 0x7f2e28001cc0. Requested size was 334
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 334, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 334
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 334, remaining to write 334
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 334
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28000d70 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28000d70: Scheduling socket_written_task task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 0, using timeout of 0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 0 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is writable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, invoked by the event-loop
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28000d70: Running socket_written_task task with <Running> status
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - static: write of size 334, completed on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4977424104, using timeout of 4977.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4977 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 63, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - fd=63: connection activity handler triggered 
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: has not timed out yet proceeding with connection.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: un-subscribing from events on fd 63
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28001c00 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001c00: Scheduling epoll_event_loop_unsubscribe_cleanup task for immediate execution
+[INFO] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: connection success
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: local endpoint 192.168.1.112:45650
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: assigning to event loop 0x2e39730
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: subscribing to events on fd 63
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: client connection on socket 0x7f2e28001820 completed with error 0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: releasing socket 0x7f2e28001820 either because we already have a successful connection or because it errored out.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001820 fd=63: closing
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: un-subscribing from events on fd 63
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28001de0 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001de0: Scheduling epoll_event_loop_unsubscribe_cleanup task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001c00: Running epoll_event_loop_unsubscribe_cleanup task with <Running> status
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001de0: Running epoll_event_loop_unsubscribe_cleanup task with <Running> status
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4975498446, using timeout of 4975.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4975 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is readable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: socket is now readable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: invoking read. Downstream window 18446744073709551615, max_to_read 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800e6c0 of capacity 16384 from pool 0x7f2e28001cc0. Requested size was 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of 4320
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: read 4320 from socket
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending read message of size 4320, from slot 0x7f2e28012760 to slot 0x7f2e28002370 with handler 0x7f2e280130d0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800e6c0 of capacity 12064 from pool 0x7f2e28001cc0. Requested size was 12064
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of -1
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read would block
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012780: total read on this tick 4320
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: out of data to read on socket. Waiting on event-loop notification.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is writable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, invoked by the event-loop
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4951686095, using timeout of 4951.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4951 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is writable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, invoked by the event-loop
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4951660081, using timeout of 4951.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4951 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is readable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: socket is now readable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: invoking read. Downstream window 18446744073709551615, max_to_read 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800e6c0 of capacity 16384 from pool 0x7f2e28001cc0. Requested size was 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of 773
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: read 773 from socket
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending read message of size 773, from slot 0x7f2e28012760 to slot 0x7f2e28002370 with handler 0x7f2e280130d0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800e6c0 of capacity 15611 from pool 0x7f2e28001cc0. Requested size was 15611
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of 384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: read 384 from socket
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending read message of size 384, from slot 0x7f2e28012760 to slot 0x7f2e28002370 with handler 0x7f2e280130d0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800e6c0 of capacity 877 from pool 0x7f2e28001cc0. Requested size was 877
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 877, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 877
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 877, remaining to write 877
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 877
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28000d70 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28000d70: Scheduling socket_written_task task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e28012b90 of capacity 75 from pool 0x7f2e28001cc0. Requested size was 75
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 75, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 75
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 75, remaining to write 75
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 75
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800a5c0 of capacity 269 from pool 0x7f2e28001cc0. Requested size was 269
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 269, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 269
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 269, remaining to write 269
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 269
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e28012a50 of capacity 6 from pool 0x7f2e28001cc0. Requested size was 6
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 6, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 6
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 6, remaining to write 6
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 6
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e28012910 of capacity 45 from pool 0x7f2e28001cc0. Requested size was 45
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 45, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 45
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 45, remaining to write 45
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 45
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e28006480 of capacity 15227 from pool 0x7f2e28001cc0. Requested size was 15227
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of -1
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read would block
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012780: total read on this tick 1157
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: out of data to read on socket. Waiting on event-loop notification.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is writable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, invoked by the event-loop
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28000d70: Running socket_written_task task with <Running> status
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - static: write of size 877, completed on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - static: write of size 75, completed on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - static: write of size 269, completed on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - static: write of size 6, completed on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - static: write of size 45, completed on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4949639695, using timeout of 4949.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4949 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is writable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, invoked by the event-loop
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: running scheduled tasks.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: detected more scheduled tasks with the next occurring at 4949596670, using timeout of 4949.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: waiting for a maximum of 4949 ms
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: wake up with 1 events to process.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: activity on fd 62, invoking handler.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: is readable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: socket is now readable
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: invoking read. Downstream window 18446744073709551615, max_to_read 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800a5c0 of capacity 16384 from pool 0x7f2e28001cc0. Requested size was 16384
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of 51
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: read 51 from socket
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending read message of size 51, from slot 0x7f2e28012760 to slot 0x7f2e28002370 with handler 0x7f2e280130d0.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [tls-handler] - id=0x7f2e280130d0: Remote server name is a19vzmsjwkvm63-ats.iot.us-east-1.amazonaws.com
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel-bootstrap] - id=0x267b3b0: tls negotiation result 0 on channel 0x7f2e28002070
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: creating new slot 0x7f2e28026330.
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [mqtt-client] - id=0x2e464f0: Connection successfully opened, sending CONNECT packet
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: scheduling task with wrapper task id 0x7f2e28001dc0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28001dc0 in-thread for timestamp 27536805865047
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28001dc0: Scheduling mqtt_connack_timeout task for future execution at time 27536805865047
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [mqtt-client] - id=0x2e464f0: Adding will to connection on test-topic with payload The client has gone offline!
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e28012910 of capacity 71 from pool 0x7f2e28001cc0. Requested size was 71
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [mqtt-client] - id=0x2e464f0: Acquiring memory from pool of required_length 71
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 70, from slot 0x7f2e28026330 to slot 0x7f2e28002370 with handler 0x7f2e280130d0.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e28012a50 of capacity 99 from pool 0x7f2e28001cc0. Requested size was 99
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: sending write message of size 99, from slot 0x7f2e28002370 to slot 0x7f2e28012760 with handler 0x7f2e28012e40.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: writing message of size 99
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: processing write requests, called from aws_socket_write
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: dequeued write request of size 99, remaining to write 99
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: send written size 99
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: remaining write request to write 0
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: write request completed
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [event-loop] - id=0x2e39730: scheduling task 0x7f2e28000d70 in-thread for timestamp 0
+[DEBUG] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [task-scheduler] - id=0x7f2e28000d70: Scheduling socket_written_task task for immediate execution
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [tls-handler] - id=0x7f2e280130d0: Bytes written: 70
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [channel] - id=0x7f2e28002070: acquired message 0x7f2e2800a5c0 of capacity 16333 from pool 0x7f2e28001cc0. Requested size was 16333
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read of -1
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket] - id=0x7f2e28001060 fd=62: read would block
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012780: total read on this tick 51
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640] [socket-handler] - id=0x7f2e28012e40: out of data to read on socket. Waiting on event-loop notification.
+[TRACE] [2022-04-27T20:39:40Z] [00007f2e45ff7640
