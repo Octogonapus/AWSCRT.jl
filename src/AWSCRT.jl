@@ -65,7 +65,7 @@ function __init__()
     # TODO try cleanup using this approach https://github.com/JuliaLang/julia/pull/20124/files
 end
 
-aws_err_string() = "AWS Error $(aws_last_error()): " * Base.unsafe_string(aws_error_debug_str(aws_last_error()))
+aws_err_string(code = aws_last_error()) = "AWS Error $code: " * Base.unsafe_string(aws_error_debug_str(code))
 
 include("AWSIO.jl")
 export EventLoopGroup

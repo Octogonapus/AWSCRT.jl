@@ -179,26 +179,22 @@ function connect(
 
     # TODO proxy_options
 
-    tls_connection_options = TLSConnectionOptions(connection.client.tls_ctx, alpn_list, server_name)
+    tls_connection_options = if connection.client.tls_ctx !== nothing
+        TLSConnectionOptions(connection.client.tls_ctx, alpn_list, server_name)
+    else
+        nothing
+    end
 
     try
         server_name_cur = Ref(aws_byte_cursor_from_c_str(server_name))
         client_id_cur = Ref(aws_byte_cursor_from_c_str(client_id))
 
         ch = Channel(1)
-        out = @async begin
-            result = take!(ch)
-            if result isa Exception
-                throw(result)
-            else
-                return result
-            end
-        end
         on_connection_complete_fcb = ForeignCallbacks.ForeignCallback{OnConnectionCompleteMsg}() do msg
             result = if msg.return_code != AWS_MQTT_CONNECT_ACCEPTED
-                ErrorException("Connection failed. return_code=$(aws_mqtt_connect_return_code(msg.return_code))")
+                ErrorException("Connection failed. return_code=$(msg.return_code) $(aws_err_string(msg.return_code))")
             elseif msg.error_code != AWS_ERROR_SUCCESS
-                ErrorException("Connection failed. error_code=$(aws_common_error(msg.error_code))")
+                ErrorException("Connection failed. error_code=$(msg.error_code) $(aws_err_string(msg.error_code))")
             else
                 Dict(:session_present => msg.session_present)
             end
@@ -206,14 +202,16 @@ function connect(
         end
         on_connection_complete_token = Ref(ForeignCallbacks.ForeignToken(on_connection_complete_fcb))
 
-        on_connection_complete_cb = @cfunction(on_connection_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Cuchar, Ptr{Cvoid}))
+        on_connection_complete_cb =
+            @cfunction(on_connection_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Cuchar, Ptr{Cvoid}))
 
-        GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur on_connection_complete_fcb on_connection_complete_token on_connection_complete_cb begin
+        GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur on_connection_complete_fcb on_connection_complete_token begin
             conn_options = Ref(
                 aws_mqtt_connection_options(
                     server_name_cur[],
                     port,
                     Base.unsafe_convert(Ptr{aws_socket_options}, socket_options),
+                    tls_connection_options === nothing ? C_NULL :
                     Base.unsafe_convert(Ptr{aws_tls_connection_options}, tls_connection_options.ptr),
                     client_id_cur[],
                     keep_alive_secs,
@@ -228,10 +226,22 @@ function connect(
             if aws_mqtt_client_connection_connect(connection.ptr, conn_options) != AWS_OP_SUCCESS
                 error("Failed to connect. $(aws_err_string())")
             end
+
+            out = @async begin
+                GC.@preserve connection conn_options on_connection_complete_fcb on_connection_complete_token begin
+                    result = take!(ch)
+                    if result isa Exception
+                        throw(result)
+                    else
+                        return result
+                    end
+                end
+            end
+
             return out
         end
     finally
-        aws_tls_connection_options_clean_up(tls_connection_options.ptr)
+        tls_connection_options !== nothing && aws_tls_connection_options_clean_up(tls_connection_options.ptr)
     end
 end
 
