@@ -192,9 +192,9 @@ function connect(
         ch = Channel(1)
         on_connection_complete_fcb = ForeignCallbacks.ForeignCallback{OnConnectionCompleteMsg}() do msg
             result = if msg.return_code != AWS_MQTT_CONNECT_ACCEPTED
-                ErrorException("Connection failed. return_code=$(msg.return_code) $(aws_err_string(msg.return_code))")
+                ErrorException("Connection failed. $(aws_err_string(msg.return_code))")
             elseif msg.error_code != AWS_ERROR_SUCCESS
-                ErrorException("Connection failed. error_code=$(msg.error_code) $(aws_err_string(msg.error_code))")
+                ErrorException("Connection failed. $(aws_err_string(msg.error_code))")
             else
                 Dict(:session_present => msg.session_present != 0)
             end
@@ -243,10 +243,7 @@ function connect(
     end
 end
 
-function on_disconnect_complete(
-    connection::Ptr{aws_mqtt_client_connection},
-    userdata::Ptr{Cvoid},
-)
+function on_disconnect_complete(connection::Ptr{aws_mqtt_client_connection}, userdata::Ptr{Cvoid})
     # This is a native function and may not interact with the Julia runtime
     token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
     ForeignCallbacks.notify!(token, nothing)
@@ -278,6 +275,84 @@ function disconnect(connection::Connection)
     end
 end
 
+struct OnMessageMsg
+    topic_copy::Ptr{Cuchar}
+    topic_len::Csize_t
+    payload_copy::Ptr{Cuchar}
+    payload_len::Csize_t
+    dup::Cuchar
+    qos::Cint
+    retain::Cuchar
+end
+
+function on_message(
+    connection::Ptr{aws_mqtt_client_connection},
+    topic::Ptr{aws_byte_cursor},
+    payload::Ptr{aws_byte_cursor},
+    dup::Cuchar,
+    qos::Cint,
+    retain::Cuchar,
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+
+    # Make a copy because we only have topic inside this function, not inside the ForeignCallback
+    topic_obj = Base.unsafe_load(topic)
+    topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), topic_obj.len, 1)
+    ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), topic_copy, topic_obj.ptr, topic_obj.len)
+
+    # Make a copy because we only have payload inside this function, not inside the ForeignCallback
+    payload_obj = Base.unsafe_load(payload)
+    payload_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), payload_obj.len, 1)
+    ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), payload_copy, payload_obj.ptr, payload_obj.len)
+
+    ForeignCallbacks.notify!(
+        token,
+        OnMessageMsg(
+            Base.unsafe_convert(Ptr{Cuchar}, topic_copy),
+            topic_obj.len,
+            Base.unsafe_convert(Ptr{Cuchar}, payload_copy),
+            payload_obj.len,
+            dup,
+            qos,
+            retain,
+        ),
+    )
+    return nothing
+end
+
+struct OnSubcribeCompleteMsg
+    packet_id::Cuint
+    topic_copy::Ptr{Cuchar}
+    topic_len::Csize_t
+    qos::Cint
+    error_code::Cint
+end
+
+function on_subscribe_complete(
+    connection::Ptr{aws_mqtt_client_connection},
+    packet_id::Cuint,
+    topic::Ptr{aws_byte_cursor},
+    qos::Cint,
+    error_code::Cint,
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+
+    # Make a copy because we only have topic inside this function, not inside the ForeignCallback
+    topic_obj = Base.unsafe_load(topic)
+    topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), topic_obj.len, 1)
+    ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), topic_copy, topic_obj.ptr, topic_obj.len)
+
+    ForeignCallbacks.notify!(
+        token,
+        OnSubcribeCompleteMsg(packet_id, Base.unsafe_convert(Ptr{Cuchar}, topic_copy), topic_obj.len, qos, error_code),
+    )
+    return nothing
+end
+
 """
     subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
 
@@ -306,7 +381,68 @@ If unsucessful, the task contains an exception.
 
 # TODO test if the AWS IoT broker grants QoS 0 or 1 if you ask for 2. Or if it actually doesn't send PUBACK or SUBACK.
 """
-subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage) = error("Not implemented.")
+function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
+    on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
+        callback(
+            String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
+            String(Base.unsafe_wrap(Array, msg.payload_copy, msg.payload_len, own = true)),
+            msg.dup != 0,
+            aws_mqtt_qos(msg.qos),
+            msg.retain != 0,
+        )
+    end
+    on_message_token = Ref(ForeignCallbacks.ForeignToken(on_message_fcb))
+    on_message_cb = @cfunction(
+        on_message,
+        Cvoid,
+        (Ptr{aws_mqtt_client_connection}, Ptr{aws_byte_cursor}, Ptr{aws_byte_cursor}, Cuchar, Cint, Cuchar, Ptr{Cvoid})
+    )
+
+    ch = Channel(1)
+    on_subscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnSubcribeCompleteMsg}() do msg
+        result = if msg.error_code != AWS_ERROR_SUCCESS
+            ErrorException("Subscribe failed. $(aws_err_string(msg.error_code))")
+        else
+            Dict(
+                :packet_id => UInt(msg.packet_id),
+                :topic => String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
+                :qos => aws_mqtt_qos(msg.qos),
+            )
+        end
+        put!(ch, result)
+    end
+    on_subscribe_complete_token = Ref(ForeignCallbacks.ForeignToken(on_subscribe_complete_fcb))
+    on_subscribe_complete_cb = @cfunction(
+        on_subscribe_complete,
+        Cvoid,
+        (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_byte_cursor}, Cint, Cint, Ptr{Cvoid})
+    )
+
+    topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
+    GC.@preserve connection topic_cur on_subscribe_complete_fcb on_subscribe_complete_token on_message_fcb on_message_token begin
+        packet_id = aws_mqtt_client_connection_subscribe(
+            connection.ptr,
+            topic_cur,
+            qos,
+            on_message_cb,
+            Base.unsafe_convert(Ptr{Cvoid}, on_message_token),
+            C_NULL, # called when a subscription is removed
+            on_subscribe_complete_cb,
+            Base.unsafe_convert(Ptr{Cvoid}, on_subscribe_complete_token),
+        )
+        return (@async begin
+            GC.@preserve connection topic_cur on_subscribe_complete_fcb on_subscribe_complete_token on_message_fcb on_message_token begin
+                result = take!(ch)
+                if result isa Exception
+                    throw(result)
+                else
+                    return result
+                end
+            end
+        end),
+        packet_id
+    end
+end
 
 """
     on_message(connection::Connection, callback::OnMessage)
@@ -358,6 +494,24 @@ If unsucessful, the task contains an exception.
 """
 resubscribe_existing_topics(connection::Connection) = error("Not implemented.")
 
+struct OnPublishCompleteMsg
+    packet_id::Cuint
+    error_code::Cint
+end
+
+function on_publish_complete(
+    connection::Ptr{aws_mqtt_client_connection},
+    packet_id::Cuint,
+    error_code::Cint,
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+
+    ForeignCallbacks.notify!(token, OnPublishCompleteMsg(packet_id, error_code))
+    return nothing
+end
+
 """
 Publish message (async).
 If the device is offline, the PUBLISH packet will be sent once the connection resumes.
@@ -380,5 +534,42 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task will contain an exception.
 """
-publish(connection::Connection, topic::String, payload, qos::aws_mqtt_qos, retain::Bool = false) =
-    error("Not implemented.")
+function publish(connection::Connection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
+    ch = Channel(1)
+    on_publish_complete_fcb = ForeignCallbacks.ForeignCallback{OnPublishCompleteMsg}() do msg
+        result = if msg.error_code != AWS_ERROR_SUCCESS
+            ErrorException("Publish failed. $(aws_err_string(msg.error_code))")
+        else
+            Dict(:packet_id => UInt(msg.packet_id))
+        end
+        put!(ch, result)
+    end
+    on_publish_complete_token = Ref(ForeignCallbacks.ForeignToken(on_publish_complete_fcb))
+    on_publish_complete_cb =
+        @cfunction(on_publish_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+
+    topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
+    payload_cur = Ref(aws_byte_cursor_from_c_str(payload))
+    GC.@preserve connection topic_cur payload_cur on_publish_complete_fcb on_publish_complete_token begin
+        packet_id = aws_mqtt_client_connection_publish(
+            connection.ptr,
+            topic_cur,
+            qos,
+            retain,
+            payload_cur,
+            on_publish_complete_cb,
+            Base.unsafe_convert(Ptr{Cvoid}, on_publish_complete_token),
+        )
+        return (@async begin
+            GC.@preserve connection topic_cur payload_cur on_publish_complete_fcb on_publish_complete_token begin
+                result = take!(ch)
+                if result isa Exception
+                    throw(result)
+                else
+                    return result
+                end
+            end
+        end),
+        packet_id
+    end
+end
