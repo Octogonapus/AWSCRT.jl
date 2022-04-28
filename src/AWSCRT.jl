@@ -84,7 +84,6 @@ include("AWSIO.jl")
 export EventLoopGroup
 export HostResolver
 export ClientBootstrap
-export TLSContextOptions
 export ClientTLSContext
 export TLSConnectionOptions
 

@@ -1,3 +1,13 @@
+"""
+    EventLoopGroup(num_threads::Union{Int,Nothing} = nothing, cpu_group::Union{Int,Nothing} = nothing)
+
+A collection of event-loops.
+An event-loop is a thread for doing async work, such as I/O.
+
+Arguments:
+- `num_threads (Union{Int,Nothing}) (default=nothing)`: Maximum number of event-loops to create. If unspecified, one is created for each processor on the machine.
+- `cpu_group (Union{Int,Nothing}) (default=nothing)`: Optional processor group to which all threads will be pinned. Useful for systems with non-uniform memory access (NUMA) nodes. If specified, the number of threads will be capped at the number of processors in the group.
+"""
 mutable struct EventLoopGroup
     ptr::Ptr{aws_event_loop_group}
 
@@ -39,6 +49,15 @@ release_default_event_loop_group() =
         event_loop_group_default[] = nothing
     end
 
+"""
+    HostResolver(el_group::EventLoopGroup, max_hosts::Int = 16)
+
+Default DNS host resolver
+
+Arguments:
+- `el_group (EventLoopGroup)`: EventLoopGroup to use.
+- `max_hosts (Int) (default=16)`: Max host names to cache.
+"""
 mutable struct HostResolver
     ptr::Ptr{aws_host_resolver}
 
@@ -70,6 +89,15 @@ release_default_host_resolver() =
         host_resolver_default[] = nothing
     end
 
+"""
+    ClientBootstrap(el_group::EventLoopGroup, host_resolver::HostResolver)
+
+Handles creation and setup of client socket connections.
+
+Arguments:
+- `el_group (EventLoopGroup)`: EventLoopGroup to use.
+- `host_resolver (HostResolver)`: DNS host resolver to use.
+"""
 mutable struct ClientBootstrap
     ptr::Ptr{aws_client_bootstrap}
 
@@ -100,6 +128,30 @@ release_default_client_bootstrap() =
         client_bootstrap_default[] = nothing
     end
 
+"""
+    TLSContextOptions(;
+        min_tls_version::aws_tls_versions = AWS_IO_TLS_VER_SYS_DEFAULTS,
+        ca_dirpath::Union{String,Nothing} = nothing,
+        ca_filepath::Union{String,Nothing} = nothing,
+        ca_data::Union{String,Nothing} = nothing,
+        alpn_list::Union{Vector{String},Nothing} = nothing,
+        cert_data::Union{String,Nothing} = nothing,
+        pk_data::Union{String,Nothing} = nothing,
+        verify_peer::Bool = true,
+    )
+
+Options to create a TLS context.
+
+Arguments:
+- `min_tls_version (aws_tls_versions) (default=AWS_IO_TLS_VER_SYS_DEFAULTS)`: Minimum TLS version to use. System defaults are used by default.
+- `ca_dirpath (Union{String,Nothing}) (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
+- `ca_filepath (Union{String,Nothing}) (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
+- `ca_data (Union{String,Nothing}) (default=nothing)`: PEM armored chain of trusted CA certificates.
+- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: If set, names to use in Application Layer Protocol Negotiation (ALPN). ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref). This can be customized per connection; see [`TLSConnectionOptions`](@ref).
+- `cert_data (Union{String,Nothing}) (default=nothing)`: Certificate contents. Treated as PKCS #7 PEM armored.
+- `pk_data (Union{String,Nothing}) (default=nothing)`: Private key contents. Treated as PKCS #7 PEM armored.
+- `verify_peer (Bool) (default=true)`: Whether to validate the peer's x.509 certificate.
+"""
 mutable struct TLSContextOptions
     min_tls_version::aws_tls_versions
     ca_dirpath::Union{String,Nothing}
@@ -127,6 +179,99 @@ mutable struct TLSContextOptions
     end
 end
 
+"""
+    create_client_with_mtls_from_path(
+        cert_filepath,
+        pk_filepath;
+        ca_dirpath = nothing,
+        ca_filepath = nothing,
+        ca_data = nothing,
+    )
+
+Create options configured for use with mutual TLS in client mode.
+Both files are treated as PKCS #7 PEM armored.
+They are loaded from disk and stored in buffers internally.
+
+Arguments:
+- `cert_filepath`: Path to certificate file.
+- `pk_filepath`: Path to private key file.
+- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
+- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
+- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+"""
+create_client_with_mtls_from_path(
+    cert_filepath,
+    pk_filepath;
+    ca_dirpath = nothing,
+    ca_filepath = nothing,
+    ca_data = nothing,
+) = create_client_with_mtls(read(cert_filepath, String), read(pk_filepath, String); ca_dirpath, ca_filepath, ca_data)
+
+"""
+    create_client_with_mtls(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing)
+
+Create options configured for use with mutual TLS in client mode.
+Both buffers are treated as PKCS #7 PEM armored.
+
+Arguments:
+- `cert_data`: Certificate contents
+- `pk_data`: Private key contents.
+- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
+- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
+- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+"""
+create_client_with_mtls(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing) =
+    TLSContextOptions(; cert_data, pk_data, ca_dirpath, ca_filepath, ca_data)
+
+# TODO create_client_with_mtls_pkcs11
+# TODO create_client_with_mtls_pkcs12
+# TODO create_client_with_mtls_windows_cert_store_path
+
+"""
+    create_server_from_path(cert_filepath, pk_filepath; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing)
+
+Create options configured for use in server mode.
+Both files are treated as PKCS #7 PEM armored.
+They are loaded from disk and stored in buffers internally.
+
+Arguments:
+- `cert_filepath`: Path to certificate file.
+- `pk_filepath`: Path to private key file.
+- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
+- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
+- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+"""
+create_server_from_path(cert_filepath, pk_filepath; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing) =
+    create_server(read(cert_filepath, String), read(pk_filepath, String); ca_dirpath, ca_filepath, ca_data)
+
+"""
+    create_server(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing)
+
+Create options configured for use in server mode.
+Both buffers are treated as PKCS #7 PEM armored.
+
+Arguments:
+- `cert_data`: Certificate contents
+- `pk_data`: Private key contents.
+- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
+- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
+- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+"""
+create_server(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing) =
+    TLSContextOptions(; cert_data, pk_data, verify_peer = false, ca_dirpath, ca_filepath, ca_data)
+
+# TODO create_server_pkcs12
+
+"""
+    ClientTLSContext(options::TLSContextOptions)
+
+Client TLS context.
+A context is expensive, but can be used for the lifetime of the application by all outgoing connections that wish to
+use the same TLS configuration.
+
+Arguments:
+- `options (TLSContextOptions)`: Configuration options.
+"""
 mutable struct ClientTLSContext
     ptr::Ptr{aws_tls_ctx}
 
@@ -142,7 +287,8 @@ mutable struct ClientTLSContext
                 # mTLS with certificate and private key
                 cert = Ref(aws_byte_cursor_from_c_str(options.cert_data))
                 key = Ref(aws_byte_cursor_from_c_str(options.pk_data))
-                if aws_tls_ctx_options_init_client_mtls(tls_ctx_opt_ptr, _AWSCRT_ALLOCATOR[], cert, key) != AWS_OP_SUCCESS
+                if aws_tls_ctx_options_init_client_mtls(tls_ctx_opt_ptr, _AWSCRT_ALLOCATOR[], cert, key) !=
+                   AWS_OP_SUCCESS
                     error("Failed to create client TLS context. $(aws_err_string())")
                 end
             else
@@ -196,6 +342,21 @@ mutable struct ClientTLSContext
     end
 end
 
+"""
+    TLSConnectionOptions(
+        client_tls_context::ClientTLSContext,
+        alpn_list::Union{Vector{String},Nothing} = nothing,
+        server_name::Union{String,Nothing} = nothing,
+    )
+
+Connection-specific TLS options.
+Note that while a TLS context is an expensive object, this object is cheap.
+
+Arguments:
+- `client_tls_context (ClientTLSContext)`: TLS context. A context can be shared by many connections.
+- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: Connection-specific Application Layer Protocol Negotiation (ALPN) list. This overrides any ALPN list on the TLS context in the client this connection was made with. ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref).
+- `server_name (Union{String,Nothing}) (default=nothing)`: Name for TLS Server Name Indication (SNI). Also used for x.509 validation.
+"""
 mutable struct TLSConnectionOptions
     ptr::Ref{aws_tls_connection_options}
 
@@ -204,20 +365,29 @@ mutable struct TLSConnectionOptions
         alpn_list::Union{Vector{String},Nothing} = nothing,
         server_name::Union{String,Nothing} = nothing,
     )
-        tls_connection_options = Ref(aws_tls_connection_options(C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, false, 0))
+        tls_connection_options =
+            Ref(aws_tls_connection_options(C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, false, 0))
         aws_tls_connection_options_init_from_ctx(tls_connection_options, client_tls_context.ptr)
 
         try
             if alpn_list !== nothing
                 alpn_list_string = join(alpn_list, ';')
-                if aws_tls_connection_options_set_alpn_list(tls_connection_options, _AWSCRT_ALLOCATOR[], alpn_list_string) != AWS_OP_SUCCESS
+                if aws_tls_connection_options_set_alpn_list(
+                    tls_connection_options,
+                    _AWSCRT_ALLOCATOR[],
+                    alpn_list_string,
+                ) != AWS_OP_SUCCESS
                     error("Failed to set ALPN list. $(aws_err_string())")
                 end
             end
-    
+
             if server_name !== nothing
                 server_name_cur = Ref(aws_byte_cursor_from_c_str(server_name))
-                if aws_tls_connection_options_set_server_name(tls_connection_options, _AWSCRT_ALLOCATOR[], server_name_cur) != AWS_OP_SUCCESS
+                if aws_tls_connection_options_set_server_name(
+                    tls_connection_options,
+                    _AWSCRT_ALLOCATOR[],
+                    server_name_cur,
+                ) != AWS_OP_SUCCESS
                     error("Failed to set server name. $(aws_err_string())")
                 end
             end

@@ -16,7 +16,7 @@ import Random
         alpn_list = ["x-amzn-mqtt-ca"],
     )
     tls_ctx = ClientTLSContext(tls_ctx_options)
-    client = Client(; tls_ctx)
+    client = Client(tls_ctx)
     connection = Connection(client)
 
     any_msg = Channel(1)

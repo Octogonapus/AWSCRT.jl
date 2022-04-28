@@ -1,14 +1,22 @@
+"""
+    Client(
+        tls_ctx::Union{ClientTLSContext,Nothing},
+        bootstrap::ClientBootstrap = get_or_create_default_client_bootstrap(),
+    )
+
+MQTT client.
+
+Arguments:
+- `tls_ctx (Union{ClientTLSContext,Nothing})`: TLS context for secure socket connections. If `nothing`, an unencrypted connection is used.
+- `bootstrap (ClientBootstrap) (default=get_or_create_default_client_bootstrap())`: Client bootstrap to use when initiating new socket connections. Uses the singleton by default.
+"""
 mutable struct Client
     ptr::Ptr{aws_mqtt_client}
     tls_ctx::Union{ClientTLSContext,Nothing}
 
-    """
-    MQTT client.
-    # TODO docs
-    """
-    function Client(;
+    function Client(
+        tls_ctx::Union{ClientTLSContext,Nothing},
         bootstrap::ClientBootstrap = get_or_create_default_client_bootstrap(),
-        tls_ctx::Union{ClientTLSContext,Nothing} = nothing,
     )
         client = aws_mqtt_client_new(_AWSCRT_ALLOCATOR[], bootstrap.ptr)
         if client == C_NULL
@@ -42,17 +50,35 @@ on_connection_resumed(
 const OnConnectionResumed = Function
 
 """
-# TODO docs
-on_message(
-    topic::String,
-    payload::String,
-    dup::Bool,
-    qos::aws_mqtt_qos,
-    retain::Bool,
-)
+    on_message(
+        topic::String,
+        payload::String,
+        dup::Bool,
+        qos::aws_mqtt_qos,
+        retain::Bool,
+    )
+
+A callback invoked when a message is received.
+
+Arguments:
+- `topic (String)`: Topic receiving message.
+- `payload (String)`: Payload of message.
+- `dup (Bool)`: DUP flag. If True, this might be re-delivery of an earlier attempt to send the message.
+- `qos (aws_mqtt_qos)`: Quality of Service used to deliver the message.
+- `retain (Bool)`: Retain flag. If `true`, the message was sent as a result of a new subscription being made by the client.
+
+Returns `nothing`.
 """
 const OnMessage = Function
 
+"""
+    Connection(client::Client)
+
+MQTT client connection.
+
+Arguments:
+- `client ([Client](@ref))`: MQTT client to spawn connection from.
+"""
 mutable struct Connection
     ptr::Ptr{aws_mqtt_client_connection}
     client::Client
@@ -64,23 +90,50 @@ mutable struct Connection
     on_unsubscribe_complete_refs::Dict{String,Vector{Ref}}
     on_publish_complete_refs::Dict{String,Vector{Ref}}
 
-    """
-    MQTT client connection.
-    # TODO docs
-    """
     function Connection(client::Client)
         ptr = aws_mqtt_client_connection_new(client.ptr)
         if ptr == C_NULL
             error("Failed to create connection")
         end
 
-        out = new(ptr, client, Ref[], Dict{String,Vector{Ref}}(), Dict{String,Vector{Ref}}(), Ref[], Ref[], Dict{String,Vector{Ref}}(), Dict{String,Vector{Ref}}())
+        out = new(
+            ptr,
+            client,
+            Ref[],
+            Dict{String,Vector{Ref}}(),
+            Dict{String,Vector{Ref}}(),
+            Ref[],
+            Ref[],
+            Dict{String,Vector{Ref}}(),
+            Dict{String,Vector{Ref}}(),
+        )
         return finalizer(out) do x
             aws_mqtt_client_connection_release(x.ptr)
         end
     end
 end
 
+"""
+    Will(
+        topic::String,
+        qos::aws_mqtt_qos,
+        payload::String,
+        retain::Bool,
+    )
+
+A Will message is published by the server if a client is lost unexpectedly.
+
+The Will message is stored on the server when a client connects.
+It is published if the client connection is lost without the server receiving a DISCONNECT packet.
+
+[MQTT-3.1.2-8]
+
+Arguments:
+- `topic (String)`: Topic to publish Will message on.
+- `qos (aws_mqtt_qos)`: QoS used when publishing the Will message.
+- `payload (String)`: Content of Will message.
+- `retain (Bool)`: Whether the Will message is to be retained when it is published.
+"""
 struct Will
     topic::String
     qos::aws_mqtt_qos
@@ -108,15 +161,59 @@ function on_connection_complete(
 end
 
 """
-    connect(connection::Connection)
+    connect(
+        connection::Connection,
+        server_name::String,
+        port::Integer,
+        client_id::String;
+        clean_session::Bool = true,
+        on_connection_interrupted::Union{OnConnectionInterrupted,Nothing} = nothing,
+        on_connection_resumed::Union{OnConnectionResumed,Nothing} = nothing,
+        reconnect_min_timeout_secs::Integer = 5,
+        reconnect_max_timeout_secs::Integer = 60,
+        keep_alive_secs::Integer = 1200,
+        ping_timeout_ms::Integer = 3000,
+        protocol_operation_timeout_ms::Integer = 0,
+        will::Union{Will,Nothing} = nothing,
+        username::Union{String,Nothing} = nothing,
+        password::Union{String,Nothing} = nothing,
+        socket_options = Ref(aws_socket_options(AWS_SOCKET_STREAM, AWS_SOCKET_IPV6, 5000, 0, 0, 0, false)),
+        alpn_list::Union{Vector{String},Nothing} = nothing,
+        use_websockets::Bool = false,
+        websocket_handshake_transform = nothing, # TODO union type
+        proxy_options = nothing, # TODO union type
+    )
 
 Open the actual connection to the server (async).
+
+Arguments:
+- `connection (Connection)`: Connection to use.
+- `server_name (String)`: Server name to connect to.
+- `port (Integer)`: Server port to connect to.
+- `client_id (String)`: ID to place in CONNECT packet. Must be unique across all devices/clients. If an ID is already in use, the other client will be disconnected.
+- `clean_session (Bool) (default=true)`: Whether or not to start a clean session with each reconnect. If `true`, the server will forget all subscriptions with each reconnect. Set `false` to request that the server resume an existing session or start a new session that may be resumed after a connection loss. The `session_present` bool in the connection callback informs whether an existing session was successfully resumed. If an existing session is resumed, the server remembers previous subscriptions and sends mesages (with QoS level 1 or higher) that were published while the client was offline.
+- `on_connection_interrupted (Union{OnConnectionInterrupted,Nothing}) (default=nothing)`: Optional callback invoked whenever the MQTT connection is lost. The MQTT client will automatically attempt to reconnect. See [`OnConnectionInterrupted`](@ref).
+- `on_connection_resumed (Union{OnConnectionResumed,Nothing}) (default=nothing)`: Optional callback invoked whenever the MQTT connection is automatically resumed. See [`OnConnectionResumed`](@ref).
+- `reconnect_min_timeout_secs (Integer) (default=5)`: Minimum time to wait between reconnect attempts. Must be <= `reconnect_max_timeout_secs`. Wait starts at min and doubles with each attempt until max is reached.
+- `reconnect_max_timeout_secs (Integer) (default=60)`: Maximum time to wait between reconnect attempts. Must be >= `reconnect_min_timeout_secs`. Wait starts at min and doubles with each attempt until max is reached.
+- `keep_alive_secs (Integer) (default=1200)`: The keep alive value (seconds) to send in CONNECT packet. A PING will automatically be sent at this interval. The server will assume the connection is lost if no PING is received after 1.5X this value. This duration must be longer than `ping_timeout_ms`.
+- `ping_timeout_ms (Integer) (default=3000)`: Milliseconds to wait for ping response before client assumes the connection is invalid and attempts to reconnect. This duration must be shorter than `keep_alive_secs`.
+- `protocol_operation_timeout_ms (Integer) (default=0)`: Milliseconds to wait for a response to an operation that requires a response by the server. Set to zero to disable timeout. Otherwise, the operation will fail if no response is received within this amount of time after the packet is written to the socket. This works with PUBLISH (if QoS level > 0) and UNSUBSCRIBE.
+- `will (Union{Will,Nothing}) (default=nothing)`: Will to send with CONNECT packet. The will is published by the server when its connection to the client is unexpectedly lost.
+- `username (Union{String,Nothing}) (default=nothing)`: Username to connect with.
+- `password (Union{String,Nothing}) (default=nothing)`: Password to connect with.
+- `socket_options (Ref(aws_socket_options}) (default=Ref(aws_socket_options(AWS_SOCKET_STREAM, AWS_SOCKET_IPV6, 5000, 0, 0, 0, false)))`: Optional socket options.
+- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: Connection-specific Application Layer Protocol Negotiation (ALPN) list. This overrides any ALPN list on the TLS context in the client this connection was made with. ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref).
+- `use_websockets (Bool) (default=false)`: # TODO
+- `websocket_handshake_transform (nothing) (default=nothing)`: # TODO
+- `proxy_options (nothing) (default=nothing)`: # TODO
+
 Returns a task which completes when the connection succeeds or fails.
 
 If the connection succeeds, the task will contain a dict containing the following keys:
 - `:session_present`: `true` if resuming an existing session, `false` if new session
 
-If the connection fails, the task will contain an exception.
+If the connection fails, the task will throw an exception.
 """
 function connect(
     connection::Connection,
@@ -391,7 +488,7 @@ If successful, the task will contain a dict with the following members:
 - `:topic (String)`: Topic filter of the SUBSCRIBE packet being acknowledged.
 - `:qos (aws_mqtt_qos)`: Maximum QoS that was granted by the server. This may be lower than the requested QoS.
 
-If unsucessful, the task contains an exception.
+If unsuccessful, the task contains an exception.
 """
 function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
     on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
@@ -465,7 +562,7 @@ function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, cal
 end
 
 """
-    on_message(connection::Connection, callback::OnMessage)
+    on_message(connection::Connection, callback::Union{OnMessage,Nothing})
 
 Set callback to be invoked when ANY message is received.
 
@@ -558,10 +655,10 @@ Arguments:
 Returns a task and the ID of the UNSUBSCRIBE packet.
 The task completes when an UNSUBACK is received from the server.
 
-If sucessful, the task will contain a dict with the following members:
+If successful, the task will contain a dict with the following members:
 - `:packet_id (Int)`: ID of the UNSUBSCRIBE packet being acknowledged.
 
-Is unsuccessful, the task will contain an exception.
+If unsuccessful, the task will throw an exception.
 """
 function unsubscribe(connection::Connection, topic::String)
     ch = Channel(1)
@@ -621,7 +718,7 @@ If successful, the task will contain a dict with the following members:
 - `:packet_id (Int)`: ID of the SUBSCRIBE packet being acknowledged.
 - `:topics (Vector{Tuple{Union{String,Nothing},aws_mqtt_qos}})`: Topic filter of the SUBSCRIBE packet being acknowledged and its QoS level. The topic will be `nothing` if the topic failed to resubscribe. The vector will be empty if there were no topics to resubscribe.
 
-If unsucessful, the task contains an exception.
+If unsuccessful, the task contains an exception.
 """
 resubscribe_existing_topics(connection::Connection) = error("Not implemented.")
 
@@ -644,6 +741,8 @@ function on_publish_complete(
 end
 
 """
+    publish(connection::Connection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
+
 Publish message (async).
 If the device is offline, the PUBLISH packet will be sent once the connection resumes.
 
@@ -663,7 +762,7 @@ The QoS determines when the task completes:
 If successful, the task will contain a dict with the following members:
 - `:packet_id (Int)`: ID of the PUBLISH packet that is complete.
 
-If unsuccessful, the task will contain an exception.
+If unsuccessful, the task will throw an exception.
 """
 function publish(connection::Connection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
     ch = Channel(1)
