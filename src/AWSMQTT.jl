@@ -56,7 +56,13 @@ const OnMessage = Function
 mutable struct Connection
     ptr::Ptr{aws_mqtt_client_connection}
     client::Client
+    on_connection_complete_refs::Vector{Ref}
+    on_subscribe_complete_refs::Dict{String,Vector{Ref}}
+    subscribe_refs::Dict{String,Vector{Ref}}
     on_message_refs::Vector{Ref}
+    disconnect_refs::Vector{Ref}
+    on_unsubscribe_complete_refs::Dict{String,Vector{Ref}}
+    on_publish_complete_refs::Dict{String,Vector{Ref}}
 
     """
     MQTT client connection.
@@ -68,7 +74,7 @@ mutable struct Connection
             error("Failed to create connection")
         end
 
-        out = new(ptr, client, Ref[])
+        out = new(ptr, client, Ref[], Dict{String,Vector{Ref}}(), Dict{String,Vector{Ref}}(), Ref[], Ref[], Dict{String,Vector{Ref}}(), Dict{String,Vector{Ref}}())
         return finalizer(out) do x
             aws_mqtt_client_connection_release(x.ptr)
         end
@@ -206,6 +212,9 @@ function connect(
         on_connection_complete_cb =
             @cfunction(on_connection_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Cuchar, Ptr{Cvoid}))
 
+        # The lifetime of the on_connection_complete FCB and its token is the same as the lifetime of the connection
+        connection.on_connection_complete_refs = [Ref(on_connection_complete_fcb), on_connection_complete_token]
+
         GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur on_connection_complete_fcb on_connection_complete_token begin
             conn_options = Ref(
                 aws_mqtt_connection_options(
@@ -265,6 +274,10 @@ function disconnect(connection::Connection)
     end
     on_disconnect_complete_token = Ref(ForeignCallbacks.ForeignToken(on_disconnect_complete_fcb))
     on_disconnect_complete_cb = @cfunction(on_disconnect_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Ptr{Cvoid}))
+
+    # The liftime of the on_disconnect FCB and its token is the same as the lifetime of the connection
+    connection.disconnect_refs = [Ref(on_disconnect_complete_fcb), on_disconnect_complete_token]
+
     GC.@preserve connection on_disconnect_complete_fcb on_disconnect_complete_token begin
         aws_mqtt_client_connection_disconnect(connection.ptr, on_disconnect_complete_cb, on_disconnect_complete_token)
         return @async begin
@@ -379,8 +392,6 @@ If successful, the task will contain a dict with the following members:
 - `:qos (aws_mqtt_qos)`: Maximum QoS that was granted by the server. This may be lower than the requested QoS.
 
 If unsucessful, the task contains an exception.
-
-# TODO test if the AWS IoT broker grants QoS 0 or 1 if you ask for 2. Or if it actually doesn't send PUBACK or SUBACK.
 """
 function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
     on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
@@ -398,6 +409,9 @@ function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, cal
         Cvoid,
         (Ptr{aws_mqtt_client_connection}, Ptr{aws_byte_cursor}, Ptr{aws_byte_cursor}, Cuchar, Cint, Cuchar, Ptr{Cvoid})
     )
+
+    # The lifetime of the on_message FCB and its token is the same as the lifetime of the subscription.
+    connection.subscribe_refs[topic] = [Ref(on_message_fcb), on_message_token]
 
     ch = Channel(1)
     on_subscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnSubcribeCompleteMsg}() do msg
@@ -418,6 +432,11 @@ function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, cal
         Cvoid,
         (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_byte_cursor}, Cint, Cint, Ptr{Cvoid})
     )
+
+    # The lifetime of the on_subscribe_complete FCB and its token is from SUBSCRIBE to SUBACK so we can preserve it
+    # until the task returned from this function has finished, as it finishes when a SUBACK is received.
+    # We also preserve it on the connection in case we get a stray SUBACK.
+    connection.on_subscribe_complete_refs[topic] = [Ref(on_subscribe_complete_fcb), on_subscribe_complete_token]
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
     GC.@preserve connection topic_cur on_subscribe_complete_fcb on_subscribe_complete_token on_message_fcb on_message_token begin
@@ -478,9 +497,7 @@ function on_message(connection::Connection, callback::Union{OnMessage,Nothing})
         end
         on_message_token = Ref(ForeignCallbacks.ForeignToken(on_message_fcb))
 
-        # The lifetimes of the foreign callback and its token must be at least as long as the callback.
-        # Usually we can preserve them inside the definition of a task returned to the user, but in this case there
-        # is no task to do that with, so we preserve them inside the connection instead.
+        # The lifetime of this on_message FCB and its token is the same as the lifetime of the connection
         connection.on_message_refs = [Ref(on_message_fcb), on_message_token]
 
         on_message_cb = @cfunction(
@@ -560,6 +577,12 @@ function unsubscribe(connection::Connection, topic::String)
     on_unsubscribe_complete_cb =
         @cfunction(on_unsubscribe_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
 
+    # It's not documented, but it seems like the lifetime of the on_unsubscribe_complete FCB and its token is
+    # from UNSUBSCRIBE to UNSUBACK so we can preserve it until the task returned from this function has finished,
+    # as it finishes when an UNSUBACK is received.
+    # We also preserve it on the connection in case we get a stray UNSUBACK.
+    connection.on_unsubscribe_complete_refs[topic] = [Ref(on_unsubscribe_complete_fcb), on_unsubscribe_complete_token]
+
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
     GC.@preserve connection topic_cur on_unsubscribe_complete_fcb on_unsubscribe_complete_token begin
         packet_id = aws_mqtt_client_connection_unsubscribe(
@@ -574,6 +597,9 @@ function unsubscribe(connection::Connection, topic::String)
                 if result isa Exception
                     throw(result)
                 else
+                    # Now that the subscription is done, we can GC its callbacks
+                    connection.subscribe_refs[topic] = Ref[]
+                    connection.on_subscribe_complete_refs[topic] = Ref[]
                     return result
                 end
             end
@@ -652,6 +678,12 @@ function publish(connection::Connection, topic::String, payload::String, qos::aw
     on_publish_complete_token = Ref(ForeignCallbacks.ForeignToken(on_publish_complete_fcb))
     on_publish_complete_cb =
         @cfunction(on_publish_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+
+    # It's not documented, but it seems like the lifetime of the on_publish_complete FCB and its token is
+    # from PUBLISH to either packet send, PUBACK, or PUBCOMP depending on QoS level, so we can preserve it until
+    # the task returned from this function has finished, as it finishes when the correct event is received.
+    # We also preserve it on the connection in case we get a stray PUBACK or PUBCOMP, depending on QoS level.
+    connection.on_publish_complete_refs[topic] = [Ref(on_publish_complete_fcb), on_publish_complete_token]
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
     payload_cur = Ref(aws_byte_cursor_from_c_str(payload))
