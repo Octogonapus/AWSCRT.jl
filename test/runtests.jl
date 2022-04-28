@@ -18,6 +18,17 @@ import Random
     tls_ctx = ClientTLSContext(tls_ctx_options)
     client = Client(; tls_ctx)
     connection = Connection(client)
+
+    any_msg = Channel(1)
+    sub_msg = Channel(1)
+
+    on_message(
+        connection,
+        (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
+            put!(any_msg, (; topic, payload, qos, retain))
+        end,
+    )
+
     task = connect(
         connection,
         ENV["ENDPOINT"],
@@ -27,7 +38,7 @@ import Random
     )
     @test fetch(task) == Dict(:session_present => false)
 
-    sub_msg = Channel(1)
+    # Subscribe, publish a message, and test we get it on both callbacks
     task, id = subscribe(
         connection,
         topic1,
@@ -50,6 +61,65 @@ import Random
     @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
     @test !msg.retain
 
+    msg = take!(any_msg)
+    @test msg.topic == topic1
+    @test msg.payload == payload1
+    @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
+    @test !msg.retain
+
+    # Unsubscribe, publish, and test we get nothing
+    task, id = unsubscribe(connection, topic1)
+    @test fetch(task) == Dict(:packet_id => id)
+
+    task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
+    @test fetch(task) == Dict(:packet_id => id)
+
+    sleep(0.5)
+    @test !isready(sub_msg)
+    @test !isready(any_msg)
+
+    # Disconnect, clear the on_message callback, and go around again
+    task = disconnect(connection)
+    @test fetch(task) === nothing
+
+    on_message(connection, nothing)
+
+    task = connect(
+        connection,
+        ENV["ENDPOINT"],
+        8883,
+        "test-client-id2";
+        will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
+    )
+    @test fetch(task) == Dict(:session_present => false)
+
+    # Subscribe, publish a message, and test we only get it on the subscribe callback
+    task, id = subscribe(
+        connection,
+        topic1,
+        AWS_MQTT_QOS_AT_LEAST_ONCE,
+        (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
+            put!(sub_msg, (; topic, payload, qos, retain))
+        end,
+    )
+    d = fetch(task)
+    @test d[:packet_id] == id
+    @test d[:topic] == topic1
+    @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
+
+    task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
+    @test fetch(task) == Dict(:packet_id => id)
+
+    msg = take!(sub_msg)
+    @test msg.topic == topic1
+    @test msg.payload == payload1
+    @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
+    @test !msg.retain
+
+    sleep(0.5)
+    @test !isready(any_msg)
+
+    # Shut down
     task, id = unsubscribe(connection, topic1)
     @test fetch(task) == Dict(:packet_id => id)
 

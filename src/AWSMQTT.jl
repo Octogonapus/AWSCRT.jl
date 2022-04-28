@@ -56,6 +56,7 @@ const OnMessage = Function
 mutable struct Connection
     ptr::Ptr{aws_mqtt_client_connection}
     client::Client
+    on_message_refs::Vector{Ref}
 
     """
     MQTT client connection.
@@ -67,7 +68,7 @@ mutable struct Connection
             error("Failed to create connection")
         end
 
-        out = new(ptr, client)
+        out = new(ptr, client, Ref[])
         return finalizer(out) do x
             aws_mqtt_client_connection_release(x.ptr)
         end
@@ -451,11 +452,63 @@ Set callback to be invoked when ANY message is received.
 
 Arguments:
 - `connection`: Connection to use.
-- `callback`: Optional callback invoked when message received. See [`OnMessage`](@ref) for the required signature.
+- `callback`: Optional callback invoked when message received. See [`OnMessage`](@ref) for the required signature. Set to `nothing` to clear this callback.
 
 Returns nothing.
 """
-on_message(connection::Connection, callback::OnMessage) = error("Not implemented.")
+function on_message(connection::Connection, callback::Union{OnMessage,Nothing})
+    if callback === nothing
+        if aws_mqtt_client_connection_set_on_any_publish_handler(connection.ptr, C_NULL, C_NULL) != AWS_OP_SUCCESS
+            error("Failed to set on_message. $(aws_err_string())")
+        end
+
+        # Clear any refs from a prior callback so they can be GC'd
+        connection.on_message_refs = []
+
+        return nothing
+    else
+        on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
+            callback(
+                String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
+                String(Base.unsafe_wrap(Array, msg.payload_copy, msg.payload_len, own = true)),
+                msg.dup != 0,
+                aws_mqtt_qos(msg.qos),
+                msg.retain != 0,
+            )
+        end
+        on_message_token = Ref(ForeignCallbacks.ForeignToken(on_message_fcb))
+
+        # The lifetimes of the foreign callback and its token must be at least as long as the callback.
+        # Usually we can preserve them inside the definition of a task returned to the user, but in this case there
+        # is no task to do that with, so we preserve them inside the connection instead.
+        connection.on_message_refs = [Ref(on_message_fcb), on_message_token]
+
+        on_message_cb = @cfunction(
+            on_message,
+            Cvoid,
+            (
+                Ptr{aws_mqtt_client_connection},
+                Ptr{aws_byte_cursor},
+                Ptr{aws_byte_cursor},
+                Cuchar,
+                Cint,
+                Cuchar,
+                Ptr{Cvoid},
+            )
+        )
+
+        GC.@preserve on_message_fcb on_message_token begin
+            if aws_mqtt_client_connection_set_on_any_publish_handler(
+                connection.ptr,
+                on_message_cb,
+                Base.unsafe_convert(Ptr{Cvoid}, on_message_token),
+            ) != AWS_OP_SUCCESS
+                error("Failed to set on_message. $(aws_err_string())")
+            end
+            return nothing
+        end
+    end
+end
 
 struct OnUnsubscribeCompleteMsg
     packet_id::Cuint
