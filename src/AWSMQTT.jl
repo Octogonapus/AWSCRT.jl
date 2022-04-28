@@ -457,6 +457,24 @@ Returns nothing.
 """
 on_message(connection::Connection, callback::OnMessage) = error("Not implemented.")
 
+struct OnUnsubscribeCompleteMsg
+    packet_id::Cuint
+    error_code::Cint
+end
+
+function on_unsubscribe_complete(
+    connection::Ptr{aws_mqtt_client_connection},
+    packet_id::Cuint,
+    error_code::Cint,
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+
+    ForeignCallbacks.notify!(token, OnUnsubscribeCompleteMsg(packet_id, error_code))
+    return nothing
+end
+
 """
     unsubscribe(connection::Connection, topic::String)
 
@@ -475,7 +493,41 @@ If sucessful, the task will contain a dict with the following members:
 
 Is unsuccessful, the task will contain an exception.
 """
-unsubscribe(connection::Connection, topic::String) = error("Not implemented.")
+function unsubscribe(connection::Connection, topic::String)
+    ch = Channel(1)
+    on_unsubscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnUnsubscribeCompleteMsg}() do msg
+        result = if msg.error_code != AWS_ERROR_SUCCESS
+            ErrorException("Unsubscribe failed. $(aws_err_string(msg.error_code))")
+        else
+            Dict(:packet_id => UInt(msg.packet_id))
+        end
+        put!(ch, result)
+    end
+    on_unsubscribe_complete_token = Ref(ForeignCallbacks.ForeignToken(on_unsubscribe_complete_fcb))
+    on_unsubscribe_complete_cb =
+        @cfunction(on_unsubscribe_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+
+    topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
+    GC.@preserve connection topic_cur on_unsubscribe_complete_fcb on_unsubscribe_complete_token begin
+        packet_id = aws_mqtt_client_connection_unsubscribe(
+            connection.ptr,
+            topic_cur,
+            on_unsubscribe_complete_cb,
+            Base.unsafe_convert(Ptr{Cvoid}, on_unsubscribe_complete_token),
+        )
+        return (@async begin
+            GC.@preserve connection topic_cur on_unsubscribe_complete_fcb on_unsubscribe_complete_token begin
+                result = take!(ch)
+                if result isa Exception
+                    throw(result)
+                else
+                    return result
+                end
+            end
+        end),
+        packet_id
+    end
+end
 
 """
     resubscribe_existing_topics(connection::Connection)

@@ -33,7 +33,7 @@ import Random
         topic1,
         AWS_MQTT_QOS_AT_LEAST_ONCE,
         (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
-            put!(sub_msg, (;topic, payload, qos, retain))
+            put!(sub_msg, (; topic, payload, qos, retain))
         end,
     )
     d = fetch(task)
@@ -41,20 +41,17 @@ import Random
     @test d[:topic] == topic1
     @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
 
-    task, id = publish(
-        connection,
-        topic1,
-        payload1,
-        AWS_MQTT_QOS_AT_LEAST_ONCE,
-    )
-    d = fetch(task)
-    @test d[:packet_id] == id
+    task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
+    @test fetch(task) == Dict(:packet_id => id)
 
     msg = take!(sub_msg)
     @test msg.topic == topic1
     @test msg.payload == payload1
     @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
     @test !msg.retain
+
+    task, id = unsubscribe(connection, topic1)
+    @test fetch(task) == Dict(:packet_id => id)
 
     task = disconnect(connection)
     @test fetch(task) === nothing
