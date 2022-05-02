@@ -931,12 +931,11 @@ function resubscribe_existing_topics(connection::Connection)
     )
 
     # The lifetime of the on_resubscribe_complete FCB and its token is the same as the liftime of the connection
-    libptr = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)
     udata = Ref(
         OnResubcribeCompleteUD(
             Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, on_resubscribe_complete_token),
-            Libc.Libdl.dlsym(libptr, :aws_array_list_length),
-            Libc.Libdl.dlsym(libptr, :aws_array_list_get_at),
+            Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_length),
+            Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_get_at),
         ),
     )
 

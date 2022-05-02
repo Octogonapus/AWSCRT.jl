@@ -11,8 +11,11 @@ using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum
 
 const _AWSCRT_ALLOCATOR = Ref{Union{Ptr{aws_allocator},Nothing}}(nothing)
 const _GLOBAL_REFS = Vector{Ref}()
+const _LIBPTR = Ref{Ptr{Cvoid}}(Ptr{Cvoid}(0))
 
 function __init__()
+    _LIBPTR[] = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)
+
     _AWSCRT_ALLOCATOR[] = let level = get(ENV, "AWS_CRT_MEMORY_TRACING", "")
         if !isempty(level)
             level = parse(Int, strip(level))
