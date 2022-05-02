@@ -1,9 +1,7 @@
 # AWSCRT
 
-
 | :exclamation: This is unfinished, early software. Expect bugs and breakages! |
 |------------------------------------------------------------------------------|
-
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://Octogonapus.github.io/AWSCRT.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://Octogonapus.github.io/AWSCRT.jl/dev)
