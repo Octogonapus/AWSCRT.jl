@@ -793,7 +793,6 @@ end
 
 struct OnResubcribeCompleteUD
     token::Ptr{ForeignCallbacks.ForeignToken}
-    allocator::Ptr{aws_allocator}
     aws_array_list_length_ptr::Ptr{Cvoid}
     aws_array_list_get_at_ptr::Ptr{Cvoid}
 end
@@ -936,7 +935,6 @@ function resubscribe_existing_topics(connection::Connection)
     udata = Ref(
         OnResubcribeCompleteUD(
             Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, on_resubscribe_complete_token),
-            _AWSCRT_ALLOCATOR[],
             Libc.Libdl.dlsym(libptr, :aws_array_list_length),
             Libc.Libdl.dlsym(libptr, :aws_array_list_get_at),
         ),
