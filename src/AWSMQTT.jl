@@ -820,8 +820,7 @@ function on_resubscribe_complete(
     # Make a copy of the list because we only have it inside this function, not inside the ForeignCallback
     num_topics = ccall(ud.aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
 
-    sub_i =
-        Ref(aws_mqtt_topic_subscription(aws_byte_cursor(0, C_NULL), AWS_MQTT_QOS_AT_LEAST_ONCE, C_NULL, C_NULL, C_NULL))
+    sub_i = ccall(:malloc, Ptr{Cvoid}, (Csize_t,), sizeof(aws_mqtt_topic_subscription))
     topics = ccall(:calloc, Ptr{Ptr{Cvoid}}, (Csize_t, Csize_t), num_topics, sizeof(Ptr{Ptr{Cvoid}}))
     qoss = ccall(:calloc, Ptr{aws_mqtt_qos}, (Csize_t, Csize_t), num_topics, sizeof(Cint))
     for i = 1:num_topics
@@ -834,11 +833,20 @@ function on_resubscribe_complete(
             i - 1,
         )
 
-        topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), sub_i[].topic.len, 1)
-        ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), topic_copy, sub_i[].topic.ptr, sub_i[].topic.len)
+        sub_i_obj = Base.unsafe_load(Base.unsafe_convert(Ptr{aws_mqtt_topic_subscription}, sub_i))
+
+        topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), sub_i_obj.topic.len, 1)
+        ccall(
+            :memcpy,
+            Ptr{Cvoid},
+            (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t),
+            topic_copy,
+            sub_i_obj.topic.ptr,
+            sub_i_obj.topic.len,
+        )
 
         Base.unsafe_store!(topics, topic_copy, i)
-        Base.unsafe_store!(qoss, sub_i[].qos, i)
+        Base.unsafe_store!(qoss, sub_i_obj.qos, i)
     end
 
     ForeignCallbacks.notify!(token, OnResubcribeCompleteMsg(packet_id, topics, qoss, num_topics, error_code))
