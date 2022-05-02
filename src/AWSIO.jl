@@ -128,6 +128,13 @@ release_default_client_bootstrap() =
         client_bootstrap_default[] = nothing
     end
 
+const extra_tls_kwargs_docs = """
+- `ca_dirpath (Union{String,Nothing}) (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
+- `ca_filepath (Union{String,Nothing}) (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
+- `ca_data (Union{String,Nothing}) (default=nothing)`: PEM armored chain of trusted CA certificates.
+- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: If set, names to use in Application Layer Protocol Negotiation (ALPN). ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref). This can be customized per connection; see [`TLSConnectionOptions`](@ref).
+"""
+
 """
     TLSContextOptions(;
         min_tls_version::aws_tls_versions = AWS_IO_TLS_VER_SYS_DEFAULTS,
@@ -144,10 +151,7 @@ Options to create a TLS context.
 
 Arguments:
 - `min_tls_version (aws_tls_versions) (default=AWS_IO_TLS_VER_SYS_DEFAULTS)`: Minimum TLS version to use. System defaults are used by default.
-- `ca_dirpath (Union{String,Nothing}) (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
-- `ca_filepath (Union{String,Nothing}) (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
-- `ca_data (Union{String,Nothing}) (default=nothing)`: PEM armored chain of trusted CA certificates.
-- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: If set, names to use in Application Layer Protocol Negotiation (ALPN). ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref). This can be customized per connection; see [`TLSConnectionOptions`](@ref).
+$extra_tls_kwargs_docs
 - `cert_data (Union{String,Nothing}) (default=nothing)`: Certificate contents. Treated as PKCS #7 PEM armored.
 - `pk_data (Union{String,Nothing}) (default=nothing)`: Private key contents. Treated as PKCS #7 PEM armored.
 - `verify_peer (Bool) (default=true)`: Whether to validate the peer's x.509 certificate.
@@ -180,85 +184,64 @@ mutable struct TLSContextOptions
 end
 
 """
-    create_client_with_mtls_from_path(
-        cert_filepath,
-        pk_filepath;
-        ca_dirpath = nothing,
-        ca_filepath = nothing,
-        ca_data = nothing,
-    )
+    create_client_with_mtls_from_path(cert_filepath, pk_filepath; kwargs...)
 
 Create options configured for use with mutual TLS in client mode.
 Both files are treated as PKCS #7 PEM armored.
 They are loaded from disk and stored in buffers internally.
 
 Arguments:
-- `cert_filepath`: Path to certificate file.
-- `pk_filepath`: Path to private key file.
-- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
-- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
-- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+- `cert_filepath (String)`: Path to certificate file.
+- `pk_filepath (String)`: Path to private key file.
+$extra_tls_kwargs_docs
 """
-create_client_with_mtls_from_path(
-    cert_filepath,
-    pk_filepath;
-    ca_dirpath = nothing,
-    ca_filepath = nothing,
-    ca_data = nothing,
-) = create_client_with_mtls(read(cert_filepath, String), read(pk_filepath, String); ca_dirpath, ca_filepath, ca_data)
+create_client_with_mtls_from_path(cert_filepath, pk_filepath; kwargs...) =
+    create_client_with_mtls(read(cert_filepath, String), read(pk_filepath, String); kwargs...)
 
 """
-    create_client_with_mtls(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing)
+    create_client_with_mtls(cert_data, pk_data; kwargs...)
 
 Create options configured for use with mutual TLS in client mode.
 Both buffers are treated as PKCS #7 PEM armored.
 
 Arguments:
-- `cert_data`: Certificate contents
-- `pk_data`: Private key contents.
-- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
-- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
-- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+- `cert_data (String)`: Certificate contents
+- `pk_data (String)`: Private key contents.
+$extra_tls_kwargs_docs
 """
-create_client_with_mtls(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing) =
-    TLSContextOptions(; cert_data, pk_data, ca_dirpath, ca_filepath, ca_data)
+create_client_with_mtls(cert_data, pk_data; kwargs...) = TLSContextOptions(; cert_data, pk_data, kwargs...)
 
 # TODO create_client_with_mtls_pkcs11
 # TODO create_client_with_mtls_pkcs12
 # TODO create_client_with_mtls_windows_cert_store_path
 
 """
-    create_server_from_path(cert_filepath, pk_filepath; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing)
+    create_server_from_path(cert_filepath, pk_filepath; kwargs...)
 
 Create options configured for use in server mode.
 Both files are treated as PKCS #7 PEM armored.
 They are loaded from disk and stored in buffers internally.
 
 Arguments:
-- `cert_filepath`: Path to certificate file.
-- `pk_filepath`: Path to private key file.
-- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
-- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
-- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+- `cert_filepath (String)`: Path to certificate file.
+- `pk_filepath (String)`: Path to private key file.
+$extra_tls_kwargs_docs
 """
-create_server_from_path(cert_filepath, pk_filepath; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing) =
-    create_server(read(cert_filepath, String), read(pk_filepath, String); ca_dirpath, ca_filepath, ca_data)
+create_server_from_path(cert_filepath, pk_filepath; kwargs...) =
+    create_server(read(cert_filepath, String), read(pk_filepath, String); kwargs...)
 
 """
-    create_server(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing)
+    create_server(cert_data, pk_data; kwargs...)
 
 Create options configured for use in server mode.
 Both buffers are treated as PKCS #7 PEM armored.
 
 Arguments:
-- `cert_data`: Certificate contents
-- `pk_data`: Private key contents.
-- `ca_dirpath (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
-- `ca_filepath (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
-- `ca_data (default=nothing)`: PEM armored chain of trusted CA certificates.
+- `cert_data (String)`: Certificate contents
+- `pk_data (String)`: Private key contents.
+$extra_tls_kwargs_docs
 """
-create_server(cert_data, pk_data; ca_dirpath = nothing, ca_filepath = nothing, ca_data = nothing) =
-    TLSContextOptions(; cert_data, pk_data, verify_peer = false, ca_dirpath, ca_filepath, ca_data)
+create_server(cert_data, pk_data; kwargs...) = TLSContextOptions(; cert_data, pk_data, verify_peer = false, kwargs...)
 
 # TODO create_server_pkcs12
 

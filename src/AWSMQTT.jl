@@ -31,21 +31,33 @@ mutable struct Client
 end
 
 """
-# TODO docs
-on_connection_interrupted(
-    connection::Connection,
-    error::, # TODO type
-)
+    on_connection_interrupted(
+        connection::Connection,
+        error_code::Int,
+    )
+
+A callback invoked whenever the MQTT connection is lost.
+The MQTT client will automatically attempt to reconnect.
+
+Arguments:
+- `connection (Connection)`: The connection.
+- `error_code (Int)`: Error which caused connection loss.
 """
 const OnConnectionInterrupted = Function
 
 """
-# TODO docs
-on_connection_resumed(
-    connection::Connection,
-    return_code::, # TODO type
-    session_present::Bool,
-)
+    on_connection_resumed(
+        connection::Connection,
+        return_code::aws_mqtt_connect_return_code,
+        session_present::Bool,
+    )
+
+A callback invoked whenever the MQTT connection is automatically resumed.
+
+Arguments:
+- `connection (Connection)`: The connection.
+- `return_code (aws_mqtt_connect_return_code)`: Connect return code received from the server.
+- `session_present (Bool)`: `true` if resuming existing session. `false` if new session. Note that the server has forgotten all previous subscriptions if this is `false`. Subscriptions can be re-established via [`resubscribe_existing_topics`](@ref).
 """
 const OnConnectionResumed = Function
 
@@ -84,11 +96,14 @@ mutable struct Connection
     client::Client
     on_connection_complete_refs::Vector{Ref}
     on_subscribe_complete_refs::Dict{String,Vector{Ref}}
+    on_resubscribe_complete_refs::Vector{Ref}
     subscribe_refs::Dict{String,Vector{Ref}}
     on_message_refs::Vector{Ref}
     disconnect_refs::Vector{Ref}
     on_unsubscribe_complete_refs::Dict{String,Vector{Ref}}
     on_publish_complete_refs::Dict{String,Vector{Ref}}
+    on_connection_interrupted_refs::Dict{String,Vector{Ref}}
+    on_connection_resumed_refs::Dict{String,Vector{Ref}}
 
     function Connection(client::Client)
         ptr = aws_mqtt_client_connection_new(client.ptr)
@@ -101,9 +116,12 @@ mutable struct Connection
             client,
             Ref[],
             Dict{String,Vector{Ref}}(),
+            Ref[],
             Dict{String,Vector{Ref}}(),
             Ref[],
             Ref[],
+            Dict{String,Vector{Ref}}(),
+            Dict{String,Vector{Ref}}(),
             Dict{String,Vector{Ref}}(),
             Dict{String,Vector{Ref}}(),
         )
@@ -139,6 +157,34 @@ struct Will
     qos::aws_mqtt_qos
     payload::String
     retain::Bool
+end
+
+struct OnConnectionInterruptedMsg
+    error_code::Cint
+end
+
+function on_connection_interrupted(connection::Ptr{aws_mqtt_client_connection}, error_code::Cint, userdata::Ptr{Cvoid})
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+    ForeignCallbacks.notify!(token, OnConnectionInterruptedMsg(error_code))
+    return nothing
+end
+
+struct OnConnectionResumedMsg
+    return_code::Cint
+    session_present::Cint
+end
+
+function on_connection_resumed(
+    connection::Ptr{aws_mqtt_client_connection},
+    return_code::Cint,
+    session_present::Cint,
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+    ForeignCallbacks.notify!(token, OnConnectionResumedMsg(return_code, session_present))
+    return nothing
 end
 
 struct OnConnectionCompleteMsg
@@ -249,7 +295,47 @@ function connect(
         )
     end
 
-    # TODO aws_mqtt_client_connection_set_connection_interruption_handlers
+    on_connection_interrupted_cb, on_connection_interrupted_token = if on_connection_interrupted !== nothing
+        on_connection_interrupted_fcb = ForeignCallbacks.ForeignCallback{OnConnectionInterruptedMsg}() do msg
+            on_connection_interrupted(connection, msg.error_code)
+        end
+        on_connection_interrupted_token = Ref(ForeignCallbacks.ForeignToken(on_connection_interrupted_fcb))
+        on_connection_interrupted_cb =
+            @cfunction(on_connection_interrupted, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Ptr{Cvoid}))
+
+        # The lifetime of the on_connection_interrupted FCB and its token is the same as the lifetime of the connection
+        connection.on_connection_interrupted_refs =
+            [Ref(on_connection_interrupted_cb), on_connection_interrupted_token]
+
+        on_connection_interrupted_cb, on_connection_interrupted_token
+    else
+        C_NULL, C_NULL
+    end
+
+    on_connection_resumed_cb, on_connection_resumed_token = if on_connection_resumed !== nothing
+        on_connection_resumed_fcb = ForeignCallbacks.ForeignCallback{OnConnectionResumedMsg}() do msg
+            on_connection_resumed(connection, aws_mqtt_connect_return_code(msg.return_code), msg.session_present != 0)
+        end
+        on_connection_resumed_token = Ref(ForeignCallbacks.ForeignToken(on_connection_resumed_fcb))
+        on_connection_resumed_cb =
+            @cfunction(on_connection_resumed, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Ptr{Cvoid}))
+
+        # The lifetime of the on_connection_resumed FCB and its token is the same as the lifetime of the connection
+        connection.on_connection_resumed_refs = [Ref(on_connection_resumed_cb), on_connection_resumed_token]
+
+        on_connection_resumed_cb, on_connection_resumed_token
+    else
+        C_NULL, C_NULL
+    end
+
+    aws_mqtt_client_connection_set_connection_interruption_handlers(
+        connection.ptr,
+        on_connection_interrupted_cb,
+        Base.unsafe_convert(Ptr{Cvoid}, on_connection_interrupted_token),
+        on_connection_resumed_cb,
+        Base.unsafe_convert(Ptr{Cvoid}, on_connection_resumed_token),
+    )
+
     # TODO aws_mqtt_client_connection_use_websockets
 
     if aws_mqtt_client_connection_set_reconnect_timeout(
@@ -705,6 +791,60 @@ function unsubscribe(connection::Connection, topic::String)
     end
 end
 
+struct OnResubcribeCompleteUD
+    token::Ptr{ForeignCallbacks.ForeignToken}
+    allocator::Ptr{aws_allocator}
+    aws_array_list_length_ptr::Ptr{Cvoid}
+    aws_array_list_get_at_ptr::Ptr{Cvoid}
+end
+
+struct OnResubcribeCompleteMsg
+    packet_id::Cuint
+    topics::Ptr{Ptr{Cvoid}}
+    qoss::Ptr{aws_mqtt_qos}
+    len::Csize_t
+    error_code::Cint
+end
+
+function on_resubscribe_complete(
+    connection::Ptr{aws_mqtt_client_connection},
+    packet_id::Cuint,
+    topic_subacks::Ptr{aws_array_list},
+    error_code::Cint,
+    userdata::Ptr{Cvoid},
+)
+    # This is a native function and may not interact with the Julia runtime
+    ud = Base.unsafe_load(Base.unsafe_convert(Ptr{OnResubcribeCompleteUD}, userdata))
+    token = Base.unsafe_load(ud.token)
+
+    # Make a copy of the list because we only have it inside this function, not inside the ForeignCallback
+    num_topics = ccall(ud.aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
+
+    sub_i =
+        Ref(aws_mqtt_topic_subscription(aws_byte_cursor(0, C_NULL), AWS_MQTT_QOS_AT_LEAST_ONCE, C_NULL, C_NULL, C_NULL))
+    topics = ccall(:calloc, Ptr{Ptr{Cvoid}}, (Csize_t, Csize_t), num_topics, sizeof(Ptr{Ptr{Cvoid}}))
+    qoss = ccall(:calloc, Ptr{aws_mqtt_qos}, (Csize_t, Csize_t), num_topics, sizeof(Cint))
+    for i = 1:num_topics
+        ccall(
+            ud.aws_array_list_get_at_ptr,
+            Cint,
+            (Ptr{aws_array_list}, Ptr{Cvoid}, Csize_t),
+            topic_subacks,
+            sub_i,
+            i - 1,
+        )
+
+        topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), sub_i[].topic.len, 1)
+        ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), topic_copy, sub_i[].topic.ptr, sub_i[].topic.len)
+
+        Base.unsafe_store!(topics, topic_copy, i)
+        Base.unsafe_store!(qoss, sub_i[].qos, i)
+    end
+
+    ForeignCallbacks.notify!(token, OnResubcribeCompleteMsg(packet_id, topics, qoss, num_topics, error_code))
+    return nothing
+end
+
 """
     resubscribe_existing_topics(connection::Connection)
 
@@ -720,7 +860,68 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task contains an exception.
 """
-resubscribe_existing_topics(connection::Connection) = error("Not implemented.")
+function resubscribe_existing_topics(connection::Connection)
+    ch = Channel(1)
+    on_resubscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnResubcribeCompleteMsg}() do msg
+        result = if msg.error_code != AWS_ERROR_SUCCESS
+            ErrorException("Resubscribe failed. $(aws_err_string(msg.error_code))")
+        else
+            topics_and_qoss = []
+
+            GC.@preserve msg begin
+                # topics = Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Ptr{UInt8}}, msg.topics), (msg.len,), own=false)
+                # qoss = Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{aws_mqtt_qos}, msg.qoss), (msg.len,), own=false)
+                # @show topics
+                @show msg.len
+                @show tptr = Base.unsafe_convert(Ptr{Ptr{UInt8}}, msg.topics)
+                @show qptr = Base.unsafe_convert(Ptr{aws_mqtt_qos}, msg.qoss)
+                @show Base.unsafe_load(tptr, 1)
+                @show Base.unsafe_load(qptr, 1)
+            end
+
+            # TODO aws_array_list_clean_up then free msg.topic_subacks_copy
+            Dict(:packet_id => UInt(msg.packet_id), :topics => topics_and_qoss)
+        end
+        put!(ch, result)
+    end
+    on_resubscribe_complete_token = Ref(ForeignCallbacks.ForeignToken(on_resubscribe_complete_fcb))
+    on_resubscribe_complete_cb = @cfunction(
+        on_resubscribe_complete,
+        Cvoid,
+        (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_array_list}, Cint, Ptr{Cvoid})
+    )
+
+    # The lifetime of the on_resubscribe_complete FCB and its token is the same as the liftime of the connection
+    libptr = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)
+    udata = Ref(
+        OnResubcribeCompleteUD(
+            Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, on_resubscribe_complete_token),
+            _AWSCRT_ALLOCATOR[],
+            Libc.Libdl.dlsym(libptr, :aws_array_list_length),
+            Libc.Libdl.dlsym(libptr, :aws_array_list_get_at),
+        ),
+    )
+
+    connection.on_resubscribe_complete_refs = [Ref(on_resubscribe_complete_fcb), on_resubscribe_complete_token, udata]
+
+    GC.@preserve connection on_resubscribe_complete_fcb on_resubscribe_complete_token udata begin
+        packet_id = aws_mqtt_resubscribe_existing_topics(
+            connection.ptr,
+            on_resubscribe_complete_cb,
+            Base.unsafe_convert(Ptr{Cvoid}, udata),
+        )
+        return (@async begin
+            GC.@preserve connection on_resubscribe_complete_fcb on_resubscribe_complete_token udata begin
+                result = take!(ch)
+                if result isa Exception
+                    throw(result)
+                else
+                    return result
+                end
+            end
+        end), packet_id
+    end
+end
 
 struct OnPublishCompleteMsg
     packet_id::Cuint

@@ -9,10 +9,10 @@ import Random
 @testset "AWSCRT" begin
     topic1 = "test-topic"
     payload1 = Random.randstring(48)
-    tls_ctx_options = TLSContextOptions(;
+    tls_ctx_options = create_client_with_mtls(
+        ENV["CERT_STRING"],
+        ENV["PRI_KEY_STRING"],
         ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
-        cert_data = ENV["CERT_STRING"],
-        pk_data = ENV["PRI_KEY_STRING"],
         alpn_list = ["x-amzn-mqtt-ca"],
     )
     tls_ctx = ClientTLSContext(tls_ctx_options)
@@ -51,6 +51,11 @@ import Random
     @test d[:packet_id] == id
     @test d[:topic] == topic1
     @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
+
+    task, id = resubscribe_existing_topics(connection)
+    d = fetch(task)
+    @test d[:packet_id] == id
+    @test d[:topics] == [(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE)]
 
     task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
     @test fetch(task) == Dict(:packet_id => id)

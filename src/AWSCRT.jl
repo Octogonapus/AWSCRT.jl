@@ -84,6 +84,10 @@ include("AWSIO.jl")
 export EventLoopGroup
 export HostResolver
 export ClientBootstrap
+export create_client_with_mtls_from_path
+export create_client_with_mtls
+export create_server_from_path
+export create_server
 export ClientTLSContext
 export TLSConnectionOptions
 
