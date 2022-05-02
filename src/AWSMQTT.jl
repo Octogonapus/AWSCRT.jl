@@ -800,7 +800,7 @@ end
 
 struct OnResubcribeCompleteMsg
     packet_id::Cuint
-    topics::Ptr{Ptr{Cvoid}}
+    topics::Ptr{Ptr{UInt8}}
     qoss::Ptr{aws_mqtt_qos}
     len::Csize_t
     error_code::Cint
@@ -817,25 +817,45 @@ function on_resubscribe_complete(
     ud = Base.unsafe_load(Base.unsafe_convert(Ptr{OnResubcribeCompleteUD}, userdata))
     token = Base.unsafe_load(ud.token)
 
-    # Make a copy of the list because we only have it inside this function, not inside the ForeignCallback
+    # topic_subacks is an array list with eltype (struct aws_mqtt_topic_subscription *)
+    # We are lent topic_subacks only inside this function. It will be freed as soon as this function returns.
+    # Therefore we need to copy it. This list also contains byte cursors, which will also be freed, so we need to
+    # deeply copy the topic strings.
+
     num_topics = ccall(ud.aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
 
-    sub_i = ccall(:malloc, Ptr{Cvoid}, (Csize_t,), sizeof(aws_mqtt_topic_subscription))
-    topics = ccall(:calloc, Ptr{Ptr{Cvoid}}, (Csize_t, Csize_t), num_topics, sizeof(Ptr{Ptr{Cvoid}}))
-    qoss = ccall(:calloc, Ptr{aws_mqtt_qos}, (Csize_t, Csize_t), num_topics, sizeof(Cint))
+    # alloc space to hold the eltype of the list (struct aws_mqtt_topic_subscription *)
+    sub_i_ptr = Libc.malloc(sizeof(Ptr{Cvoid}))
+    if sub_i_ptr == C_NULL
+        exit(Libc.errno())
+    end
+
+    # alloc space to hold the copied topics (this is an array of strings)
+    topics = Base.unsafe_convert(Ptr{Ptr{UInt8}}, Libc.calloc(num_topics, sizeof(Ptr{Ptr{Cvoid}})))
+    # alloc space to hold the copies QoSs (this is an array of ints)
+    qoss = Base.unsafe_convert(Ptr{aws_mqtt_qos}, Libc.calloc(num_topics, sizeof(Cint)))
+
+    # copy each topic in the list
     for i = 1:num_topics
+        # call aws_array_list_get_at to load an element into *sub_i_ptr
         ccall(
             ud.aws_array_list_get_at_ptr,
             Cint,
             (Ptr{aws_array_list}, Ptr{Cvoid}, Csize_t),
             topic_subacks,
-            sub_i,
+            sub_i_ptr,
             i - 1,
         )
-
+        # load the pointer put into *sub_i_ptr
+        sub_i = Base.unsafe_load(Base.unsafe_convert(Ptr{Ptr{aws_mqtt_topic_subscription}}, sub_i_ptr))
+        # load the struct to get at its fields
         sub_i_obj = Base.unsafe_load(Base.unsafe_convert(Ptr{aws_mqtt_topic_subscription}, sub_i))
 
+        # deep copy the topic string as it will be freed when this function returns
         topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), sub_i_obj.topic.len, 1)
+        if topic_copy == C_NULL
+            exit(Libc.errno())
+        end
         ccall(
             :memcpy,
             Ptr{Cvoid},
@@ -845,9 +865,10 @@ function on_resubscribe_complete(
             sub_i_obj.topic.len,
         )
 
-        Base.unsafe_store!(topics, topic_copy, i)
-        Base.unsafe_store!(qoss, sub_i_obj.qos, i)
+        Base.unsafe_store!(topics, Base.unsafe_convert(Ptr{UInt8}, topic_copy), i)
+        Base.unsafe_store!(qoss, sub_i_obj.qos, i) # the QoS is just an int so we can just push its value to copy it
     end
+    Libc.free(sub_i_ptr)
 
     ForeignCallbacks.notify!(token, OnResubcribeCompleteMsg(packet_id, topics, qoss, num_topics, error_code))
     return nothing
@@ -877,17 +898,28 @@ function resubscribe_existing_topics(connection::Connection)
             topics_and_qoss = []
 
             GC.@preserve msg begin
-                # topics = Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Ptr{UInt8}}, msg.topics), (msg.len,), own=false)
-                # qoss = Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{aws_mqtt_qos}, msg.qoss), (msg.len,), own=false)
-                # @show topics
-                @show msg.len
-                @show tptr = Base.unsafe_convert(Ptr{Ptr{UInt8}}, msg.topics)
-                @show qptr = Base.unsafe_convert(Ptr{aws_mqtt_qos}, msg.qoss)
-                @show Base.unsafe_load(tptr, 1)
-                @show Base.unsafe_load(qptr, 1)
+                tptr = Base.unsafe_convert(Ptr{Ptr{UInt8}}, msg.topics)
+                qptr = Base.unsafe_convert(Ptr{aws_mqtt_qos}, msg.qoss)
+                try
+                    for i = 1:msg.len
+                        try
+                            # make a copy of the topic before we free it
+                            topic = Base.unsafe_string(Base.unsafe_load(tptr, i))
+                            # also make ac opy of the qos (which is just an int)
+                            qos = Base.unsafe_load(qptr, i)
+                            push!(topics_and_qoss, (topic, qos))
+                        finally
+                            Libc.free(Base.unsafe_load(tptr, i))
+                        end
+                    end
+                finally
+                    tptr = nothing
+                    qptr = nothing
+                    Libc.free(msg.topics)
+                    Libc.free(msg.qoss)
+                end
             end
 
-            # TODO aws_array_list_clean_up then free msg.topic_subacks_copy
             Dict(:packet_id => UInt(msg.packet_id), :topics => topics_and_qoss)
         end
         put!(ch, result)
