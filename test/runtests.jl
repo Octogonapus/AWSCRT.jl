@@ -7,21 +7,6 @@ using AWSCRT, LibAWSCRT
 import Random
 
 @testset "AWSCRT" begin
-    @testset "MQTT simple pub/sub integration test pinned to core 1" begin
-        tls_ctx_options = create_client_with_mtls(
-            ENV["CERT_STRING"],
-            ENV["PRI_KEY_STRING"],
-            ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
-            alpn_list = ["x-amzn-mqtt-ca"],
-        )
-        tls_ctx = ClientTLSContext(tls_ctx_options)
-        cb = ClientBootstrap(
-            EventLoopGroup(),
-            get_or_create_default_host_resolver(),
-        )
-        client = Client(tls_ctx)
-    end
-
     @testset "MQTT pub/sub integration test" begin
         topic1 = "test-topic"
         payload1 = Random.randstring(48)
