@@ -7,6 +7,7 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://Octogonapus.github.io/AWSCRT.jl/dev)
 [![TagBot](https://github.com/Octogonapus/AWSCRT.jl/actions/workflows/TagBot.yml/badge.svg)](https://github.com/Octogonapus/AWSCRT.jl/actions/workflows/TagBot.yml)
 [![Build Status](https://github.com/Octogonapus/AWSCRT.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Octogonapus/AWSCRT.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![codecov](https://codecov.io/gh/Octogonapus/AWSCRT.jl/branch/main/graph/badge.svg?token=VFJ87JOF1O)](https://codecov.io/gh/Octogonapus/AWSCRT.jl)
 
 A high-level wrapper for the code in [LibAWSCRT.jl](https://github.com/Octogonapus/LibAWSCRT.jl).
 Currently, only an MQTT client is implemented.
