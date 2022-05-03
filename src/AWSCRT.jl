@@ -83,10 +83,17 @@ end
 
 aws_err_string(code = aws_last_error()) = "AWS Error $code: " * Base.unsafe_string(aws_error_debug_str(code))
 
+const advanced_use_note = "Note on advanced use: the internal constructor on this struct has been left at its " * 
+"default so that you can bring your own native data if you need to. However, you are then responsible for the " * 
+"memory management of that data."
+
 include("AWSIO.jl")
 export EventLoopGroup
+export get_or_create_default_event_loop_group
 export HostResolver
+export get_or_create_default_host_resolver
 export ClientBootstrap
+export get_or_create_default_client_bootstrap
 export create_client_with_mtls_from_path
 export create_client_with_mtls
 export create_server_from_path

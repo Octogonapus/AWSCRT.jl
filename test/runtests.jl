@@ -7,127 +7,144 @@ using AWSCRT, LibAWSCRT
 import Random
 
 @testset "AWSCRT" begin
-    topic1 = "test-topic"
-    payload1 = Random.randstring(48)
-    tls_ctx_options = create_client_with_mtls(
-        ENV["CERT_STRING"],
-        ENV["PRI_KEY_STRING"],
-        ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
-        alpn_list = ["x-amzn-mqtt-ca"],
-    )
-    tls_ctx = ClientTLSContext(tls_ctx_options)
-    client = Client(tls_ctx)
-    connection = Connection(client)
+    @testset "MQTT simple pub/sub integration test pinned to core 1" begin
+        tls_ctx_options = create_client_with_mtls(
+            ENV["CERT_STRING"],
+            ENV["PRI_KEY_STRING"],
+            ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
+            alpn_list = ["x-amzn-mqtt-ca"],
+        )
+        tls_ctx = ClientTLSContext(tls_ctx_options)
+        cb = ClientBootstrap(
+            EventLoopGroup(),
+            get_or_create_default_host_resolver(),
+        )
+        client = Client(tls_ctx)
+    end
 
-    any_msg = Channel(1)
-    sub_msg = Channel(1)
+    @testset "MQTT pub/sub integration test" begin
+        topic1 = "test-topic"
+        payload1 = Random.randstring(48)
+        tls_ctx_options = create_client_with_mtls(
+            ENV["CERT_STRING"],
+            ENV["PRI_KEY_STRING"],
+            ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
+            alpn_list = ["x-amzn-mqtt-ca"],
+        )
+        tls_ctx = ClientTLSContext(tls_ctx_options)
+        client = Client(tls_ctx)
+        connection = Connection(client)
 
-    on_message(
-        connection,
-        (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
-            put!(any_msg, (; topic, payload, qos, retain))
-        end,
-    )
+        any_msg = Channel(1)
+        sub_msg = Channel(1)
 
-    task = connect(
-        connection,
-        ENV["ENDPOINT"],
-        8883,
-        "test-client-id2";
-        will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
-    )
-    @test fetch(task) == Dict(:session_present => false)
+        on_message(
+            connection,
+            (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
+                put!(any_msg, (; topic, payload, qos, retain))
+            end,
+        )
 
-    # Subscribe, publish a message, and test we get it on both callbacks
-    task, id = subscribe(
-        connection,
-        topic1,
-        AWS_MQTT_QOS_AT_LEAST_ONCE,
-        (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
-            put!(sub_msg, (; topic, payload, qos, retain))
-        end,
-    )
-    d = fetch(task)
-    @test d[:packet_id] == id
-    @test d[:topic] == topic1
-    @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
+        task = connect(
+            connection,
+            ENV["ENDPOINT"],
+            8883,
+            "test-client-id2";
+            will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
+        )
+        @test fetch(task) == Dict(:session_present => false)
 
-    task, id = resubscribe_existing_topics(connection)
-    d = fetch(task)
-    @test d[:packet_id] == id
-    @test d[:topics] == [(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE)]
+        # Subscribe, publish a message, and test we get it on both callbacks
+        task, id = subscribe(
+            connection,
+            topic1,
+            AWS_MQTT_QOS_AT_LEAST_ONCE,
+            (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
+                put!(sub_msg, (; topic, payload, qos, retain))
+            end,
+        )
+        d = fetch(task)
+        @test d[:packet_id] == id
+        @test d[:topic] == topic1
+        @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
 
-    task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
-    @test fetch(task) == Dict(:packet_id => id)
+        task, id = resubscribe_existing_topics(connection)
+        d = fetch(task)
+        @test d[:packet_id] == id
+        @test d[:topics] == [(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE)]
 
-    msg = take!(sub_msg)
-    @test msg.topic == topic1
-    @test msg.payload == payload1
-    @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
-    @test !msg.retain
+        task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
+        @test fetch(task) == Dict(:packet_id => id)
 
-    msg = take!(any_msg)
-    @test msg.topic == topic1
-    @test msg.payload == payload1
-    @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
-    @test !msg.retain
+        msg = take!(sub_msg)
+        @test msg.topic == topic1
+        @test msg.payload == payload1
+        @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
+        @test !msg.retain
 
-    # Unsubscribe, publish, and test we get nothing
-    task, id = unsubscribe(connection, topic1)
-    @test fetch(task) == Dict(:packet_id => id)
+        msg = take!(any_msg)
+        @test msg.topic == topic1
+        @test msg.payload == payload1
+        @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
+        @test !msg.retain
 
-    task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
-    @test fetch(task) == Dict(:packet_id => id)
+        # Unsubscribe, publish, and test we get nothing
+        task, id = unsubscribe(connection, topic1)
+        @test fetch(task) == Dict(:packet_id => id)
 
-    sleep(0.5)
-    @test !isready(sub_msg)
-    @test !isready(any_msg)
+        task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
+        @test fetch(task) == Dict(:packet_id => id)
 
-    # Disconnect, clear the on_message callback, and go around again
-    task = disconnect(connection)
-    @test fetch(task) === nothing
+        sleep(0.5)
+        @test !isready(sub_msg)
+        @test !isready(any_msg)
 
-    on_message(connection, nothing)
+        # Disconnect, clear the on_message callback, and go around again
+        task = disconnect(connection)
+        @test fetch(task) === nothing
 
-    task = connect(
-        connection,
-        ENV["ENDPOINT"],
-        8883,
-        "test-client-id2";
-        will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
-    )
-    @test fetch(task) == Dict(:session_present => false)
+        on_message(connection, nothing)
 
-    # Subscribe, publish a message, and test we only get it on the subscribe callback
-    task, id = subscribe(
-        connection,
-        topic1,
-        AWS_MQTT_QOS_AT_LEAST_ONCE,
-        (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
-            put!(sub_msg, (; topic, payload, qos, retain))
-        end,
-    )
-    d = fetch(task)
-    @test d[:packet_id] == id
-    @test d[:topic] == topic1
-    @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
+        task = connect(
+            connection,
+            ENV["ENDPOINT"],
+            8883,
+            "test-client-id2";
+            will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
+        )
+        @test fetch(task) == Dict(:session_present => false)
 
-    task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
-    @test fetch(task) == Dict(:packet_id => id)
+        # Subscribe, publish a message, and test we only get it on the subscribe callback
+        task, id = subscribe(
+            connection,
+            topic1,
+            AWS_MQTT_QOS_AT_LEAST_ONCE,
+            (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) -> begin
+                put!(sub_msg, (; topic, payload, qos, retain))
+            end,
+        )
+        d = fetch(task)
+        @test d[:packet_id] == id
+        @test d[:topic] == topic1
+        @test d[:qos] == AWS_MQTT_QOS_AT_LEAST_ONCE
 
-    msg = take!(sub_msg)
-    @test msg.topic == topic1
-    @test msg.payload == payload1
-    @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
-    @test !msg.retain
+        task, id = publish(connection, topic1, payload1, AWS_MQTT_QOS_AT_LEAST_ONCE)
+        @test fetch(task) == Dict(:packet_id => id)
 
-    sleep(0.5)
-    @test !isready(any_msg)
+        msg = take!(sub_msg)
+        @test msg.topic == topic1
+        @test msg.payload == payload1
+        @test msg.qos == AWS_MQTT_QOS_AT_LEAST_ONCE
+        @test !msg.retain
 
-    # Shut down
-    task, id = unsubscribe(connection, topic1)
-    @test fetch(task) == Dict(:packet_id => id)
+        sleep(0.5)
+        @test !isready(any_msg)
 
-    task = disconnect(connection)
-    @test fetch(task) === nothing
+        # Shut down
+        task, id = unsubscribe(connection, topic1)
+        @test fetch(task) == Dict(:packet_id => id)
+
+        task = disconnect(connection)
+        @test fetch(task) === nothing
+    end
 end
