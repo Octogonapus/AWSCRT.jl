@@ -1,5 +1,3 @@
 [deps]
-AWSCRT = "df31ea59-17a4-4ebd-9d69-4f45266dc2c7"
 AWSCRT_jll = "01db5350-6ea1-5d9a-9a47-8a31a394cb9c"
-LibAWSCRT = "df7458b6-5204-493f-a0e7-404b4eb72fac"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
