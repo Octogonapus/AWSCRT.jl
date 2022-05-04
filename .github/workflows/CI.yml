@@ -61,6 +61,7 @@ jobs:
           version: '1'
       - run: julia -tauto --project -e 'import Pkg; Pkg.add(url="https://github.com/Octogonapus/LibAWSCRT.jl.git")'
       - uses: julia-actions/julia-buildpkg@v1
+      - run: cd docs && julia -tauto --project -e 'import Pkg; Pkg.develop(path="..")'
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
