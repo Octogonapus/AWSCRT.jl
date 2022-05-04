@@ -35,7 +35,7 @@ tls_ctx_options = create_client_with_mtls(
     alpn_list = ["x-amzn-mqtt-ca"],
 )
 tls_ctx = ClientTLSContext(tls_ctx_options)
-client = Client(tls_ctx)
+client = MQTTClient(tls_ctx)
 ```
 
 ### Connect a client
@@ -46,7 +46,7 @@ A will is not required, but we set one here.
 
 ```julia
 topic = "my-topic"
-connection = Connection(client)
+connection = MQTTConnection(client)
 task = connect(
     connection,
     ENV["ENDPOINT"],

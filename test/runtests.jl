@@ -16,8 +16,8 @@ import Random
             ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
         )
         tls_ctx = ClientTLSContext(tls_ctx_options)
-        client = Client(tls_ctx)
-        connection = Connection(client)
+        client = MQTTClient(tls_ctx)
+        connection = MQTTConnection(client)
 
         any_msg = Channel(1)
         sub_msg = Channel(1)

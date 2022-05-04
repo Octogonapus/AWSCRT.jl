@@ -1,5 +1,5 @@
 """
-    Client(
+    MQTTClient(
         tls_ctx::Union{ClientTLSContext,Nothing},
         bootstrap::ClientBootstrap = get_or_create_default_client_bootstrap(),
     )
@@ -10,11 +10,11 @@ Arguments:
 - `tls_ctx (Union{ClientTLSContext,Nothing})`: TLS context for secure socket connections. If `nothing`, an unencrypted connection is used.
 - `bootstrap (ClientBootstrap) (default=get_or_create_default_client_bootstrap())`: Client bootstrap to use when initiating new socket connections. Uses the singleton by default.
 """
-mutable struct Client
+mutable struct MQTTClient
     ptr::Ptr{aws_mqtt_client}
     tls_ctx::Union{ClientTLSContext,Nothing}
 
-    function Client(
+    function MQTTClient(
         tls_ctx::Union{ClientTLSContext,Nothing},
         bootstrap::ClientBootstrap = get_or_create_default_client_bootstrap(),
     )
@@ -32,7 +32,7 @@ end
 
 """
     on_connection_interrupted(
-        connection::Connection,
+        connection::MQTTConnection,
         error_code::Int,
     )
 
@@ -40,14 +40,14 @@ A callback invoked whenever the MQTT connection is lost.
 The MQTT client will automatically attempt to reconnect.
 
 Arguments:
-- `connection (Connection)`: The connection.
+- `connection (MQTTConnection)`: The connection.
 - `error_code (Int)`: Error which caused connection loss.
 """
 const OnConnectionInterrupted = Function
 
 """
     on_connection_resumed(
-        connection::Connection,
+        connection::MQTTConnection,
         return_code::aws_mqtt_connect_return_code,
         session_present::Bool,
     )
@@ -55,7 +55,7 @@ const OnConnectionInterrupted = Function
 A callback invoked whenever the MQTT connection is automatically resumed.
 
 Arguments:
-- `connection (Connection)`: The connection.
+- `connection (MQTTConnection)`: The connection.
 - `return_code (aws_mqtt_connect_return_code)`: Connect return code received from the server.
 - `session_present (Bool)`: `true` if resuming existing session. `false` if new session. Note that the server has forgotten all previous subscriptions if this is `false`. Subscriptions can be re-established via [`resubscribe_existing_topics`](@ref).
 """
@@ -84,16 +84,16 @@ Returns `nothing`.
 const OnMessage = Function
 
 """
-    Connection(client::Client)
+    MQTTConnection(client::MQTTClient)
 
 MQTT client connection.
 
 Arguments:
-- `client ([Client](@ref))`: MQTT client to spawn connection from.
+- `client ([MQTTClient](@ref))`: MQTT client to spawn connection from.
 """
-mutable struct Connection
+mutable struct MQTTConnection
     ptr::Ptr{aws_mqtt_client_connection}
-    client::Client
+    client::MQTTClient
     on_connection_complete_refs::Vector{Ref}
     on_subscribe_complete_refs::Dict{String,Vector{Ref}}
     on_resubscribe_complete_refs::Vector{Ref}
@@ -105,7 +105,7 @@ mutable struct Connection
     on_connection_interrupted_refs::Dict{String,Vector{Ref}}
     on_connection_resumed_refs::Dict{String,Vector{Ref}}
 
-    function Connection(client::Client)
+    function MQTTConnection(client::MQTTClient)
         ptr = aws_mqtt_client_connection_new(client.ptr)
         if ptr == C_NULL
             error("Failed to create connection")
@@ -208,7 +208,7 @@ end
 
 """
     connect(
-        connection::Connection,
+        connection::MQTTConnection,
         server_name::String,
         port::Integer,
         client_id::String;
@@ -233,7 +233,7 @@ end
 Open the actual connection to the server (async).
 
 Arguments:
-- `connection (Connection)`: Connection to use.
+- `connection (MQTTConnection)`: Connection to use.
 - `server_name (String)`: Server name to connect to.
 - `port (Integer)`: Server port to connect to.
 - `client_id (String)`: ID to place in CONNECT packet. Must be unique across all devices/clients. If an ID is already in use, the other client will be disconnected.
@@ -262,7 +262,7 @@ If the connection succeeds, the task will contain a dict containing the followin
 If the connection fails, the task will throw an exception.
 """
 function connect(
-    connection::Connection,
+    connection::MQTTConnection,
     server_name::String,
     port::Integer,
     client_id::String;
@@ -444,13 +444,13 @@ function on_disconnect_complete(connection::Ptr{aws_mqtt_client_connection}, use
 end
 
 """
-    disconnect(connection::Connection)
+    disconnect(connection::MQTTConnection)
 
 Close the connection to the server (async).
 Returns a task which completes when the connection is closed.
 The task will contain nothing.
 """
-function disconnect(connection::Connection)
+function disconnect(connection::MQTTConnection)
     latch = CountDownLatch(1)
     on_disconnect_complete_fcb = ForeignCallbacks.ForeignCallback{Nothing}() do _
         count_down(latch)
@@ -551,7 +551,7 @@ function on_subscribe_complete(
 end
 
 """
-    subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
+    subscribe(connection::MQTTConnection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
 
 Subsribe to a topic filter (async).
 The client sends a SUBSCRIBE packet and the server responds with a SUBACK.
@@ -576,7 +576,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task contains an exception.
 """
-function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
+function subscribe(connection::MQTTConnection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
     on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
         callback(
             String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
@@ -648,7 +648,7 @@ function subscribe(connection::Connection, topic::String, qos::aws_mqtt_qos, cal
 end
 
 """
-    on_message(connection::Connection, callback::Union{OnMessage,Nothing})
+    on_message(connection::MQTTConnection, callback::Union{OnMessage,Nothing})
 
 Set callback to be invoked when ANY message is received.
 
@@ -658,7 +658,7 @@ Arguments:
 
 Returns nothing.
 """
-function on_message(connection::Connection, callback::Union{OnMessage,Nothing})
+function on_message(connection::MQTTConnection, callback::Union{OnMessage,Nothing})
     if callback === nothing
         if aws_mqtt_client_connection_set_on_any_publish_handler(connection.ptr, C_NULL, C_NULL) != AWS_OP_SUCCESS
             error("Failed to set on_message. $(aws_err_string())")
@@ -729,7 +729,7 @@ function on_unsubscribe_complete(
 end
 
 """
-    unsubscribe(connection::Connection, topic::String)
+    unsubscribe(connection::MQTTConnection, topic::String)
 
 Unsubscribe from a topic filter (async).
 The client sends an UNSUBSCRIBE packet, and the server responds with an UNSUBACK.
@@ -746,7 +746,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task will throw an exception.
 """
-function unsubscribe(connection::Connection, topic::String)
+function unsubscribe(connection::MQTTConnection, topic::String)
     ch = Channel(1)
     on_unsubscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnUnsubscribeCompleteMsg}() do msg
         result = if msg.error_code != AWS_ERROR_SUCCESS
@@ -874,7 +874,7 @@ function on_resubscribe_complete(
 end
 
 """
-    resubscribe_existing_topics(connection::Connection)
+    resubscribe_existing_topics(connection::MQTTConnection)
 
 Subscribe again to all current topics.
 This is to help when resuming a connection with a clean session.
@@ -888,7 +888,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task contains an exception.
 """
-function resubscribe_existing_topics(connection::Connection)
+function resubscribe_existing_topics(connection::MQTTConnection)
     ch = Channel(1)
     on_resubscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnResubcribeCompleteMsg}() do msg
         result = if msg.error_code != AWS_ERROR_SUCCESS
@@ -979,7 +979,7 @@ function on_publish_complete(
 end
 
 """
-    publish(connection::Connection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
+    publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
 
 Publish message (async).
 If the device is offline, the PUBLISH packet will be sent once the connection resumes.
@@ -1002,7 +1002,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task will throw an exception.
 """
-function publish(connection::Connection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
+function publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
     ch = Channel(1)
     on_publish_complete_fcb = ForeignCallbacks.ForeignCallback{OnPublishCompleteMsg}() do msg
         result = if msg.error_code != AWS_ERROR_SUCCESS

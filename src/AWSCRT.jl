@@ -102,11 +102,11 @@ export ClientTLSContext
 export TLSConnectionOptions
 
 include("AWSMQTT.jl")
-export Client
+export MQTTClient
 export OnConnectionInterrupted
 export OnConnectionResumed
 export OnMessage
-export Connection
+export MQTTConnection
 export Will
 export connect
 export disconnect
