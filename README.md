@@ -101,5 +101,6 @@ fetch(task) # wait for the connection to be closed
 ### See Also
 
 - [AWS MQTT Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html)
+- [AWS Protocol Port Mapping and Authentication Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/protocols.html)
 - [AWS MQTT Topic Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/topics.html)
 - [AWS IoT Client Certificate Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/x509-client-certs.html)
