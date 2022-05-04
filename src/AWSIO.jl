@@ -41,7 +41,7 @@ function EventLoopGroup(num_threads::Union{Int,Nothing} = nothing, cpu_group::Un
         error("Failed to create EventLoopGroup. $(aws_err_string())")
     end
 
-    out = new(ptr)
+    out = EventLoopGroup(ptr)
     return finalizer(out) do x
         aws_event_loop_group_release(x.ptr)
     end
@@ -90,7 +90,7 @@ function HostResolver(el_group::EventLoopGroup, max_hosts::Int = 16)
     if ptr == C_NULL
         error("Failed to create host resolver. $(aws_err_string())")
     end
-    out = new(ptr)
+    out = HostResolver(ptr)
     return finalizer(out) do x
         aws_host_resolver_release(x.ptr)
     end
@@ -136,7 +136,7 @@ function ClientBootstrap(el_group::EventLoopGroup, host_resolver::HostResolver)
     if ptr == C_NULL
         error("Failed to create client bootstrap. $(aws_err_string())")
     end
-    out = new(ptr)
+    out = ClientBootstrap(ptr)
     return finalizer(out) do x
         aws_client_bootstrap_release(x.ptr)
     end
@@ -352,7 +352,7 @@ function ClientTLSContext(options::TLSContextOptions)
                 error("Failed to create TLS context. $(aws_err_string())")
             end
 
-            out = new(tls_ctx)
+            out = ClientTLSContext(tls_ctx)
             return finalizer(out) do x
                 aws_tls_ctx_release(x.ptr)
             end
@@ -424,7 +424,7 @@ function TLSConnectionOptions(
             end
         end
 
-        out = new(tls_connection_options)
+        out = TLSConnectionOptions(tls_connection_options)
         return finalizer(out) do x
             aws_tls_connection_options_clean_up(x.ptr)
         end
