@@ -14,7 +14,6 @@ import Random
             ENV["CERT_STRING"],
             ENV["PRI_KEY_STRING"],
             ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
-            alpn_list = ["x-amzn-mqtt-ca"],
         )
         tls_ctx = ClientTLSContext(tls_ctx_options)
         client = Client(tls_ctx)
