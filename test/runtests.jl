@@ -2,7 +2,7 @@ ENV["AWS_CRT_MEMORY_TRACING"] = "1"
 ENV["AWS_CRT_LOG_LEVEL"] = "6"
 ENV["AWS_CRT_LOG_PATH"] = joinpath(@__DIR__, "log.txt")
 
-using Test, AWSCRT, AWS.LibAWSCRT
+using Test, AWSCRT, AWSCRT.LibAWSCRT
 import Random
 
 const client_id = Random.randstring(48)
