@@ -102,8 +102,8 @@ mutable struct MQTTConnection
     disconnect_refs::Vector{Ref}
     on_unsubscribe_complete_refs::Dict{String,Vector{Ref}}
     on_publish_complete_refs::Dict{String,Vector{Ref}}
-    on_connection_interrupted_refs::Dict{String,Vector{Ref}}
-    on_connection_resumed_refs::Dict{String,Vector{Ref}}
+    on_connection_interrupted_refs::Vector{Ref}
+    on_connection_resumed_refs::Vector{Ref}
 
     function MQTTConnection(client::MQTTClient)
         ptr = aws_mqtt_client_connection_new(client.ptr)
@@ -122,8 +122,8 @@ mutable struct MQTTConnection
             Ref[],
             Dict{String,Vector{Ref}}(),
             Dict{String,Vector{Ref}}(),
-            Dict{String,Vector{Ref}}(),
-            Dict{String,Vector{Ref}}(),
+            Ref[],
+            Ref[],
         )
         return finalizer(out) do x
             aws_mqtt_client_connection_release(x.ptr)
