@@ -1,16 +1,16 @@
-using AWSMQTT
+using AWSCRT
 using Documenter
 
-DocMeta.setdocmeta!(AWSMQTT, :DocTestSetup, :(using AWSMQTT); recursive=true)
+DocMeta.setdocmeta!(AWSCRT, :DocTestSetup, :(using AWSCRT); recursive=true)
 
 makedocs(;
-    modules=[AWSMQTT],
+    modules=[AWSCRT],
     authors="Octogonapus <firey45@gmail.com> and contributors",
-    repo="https://github.com/Octogonapus/AWSMQTT.jl/blob/{commit}{path}#{line}",
-    sitename="AWSMQTT.jl",
+    repo="https://github.com/Octogonapus/AWSCRT.jl/blob/{commit}{path}#{line}",
+    sitename="AWSCRT.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://Octogonapus.github.io/AWSMQTT.jl",
+        canonical="https://Octogonapus.github.io/AWSCRT.jl",
         assets=String[],
     ),
     pages=[
@@ -19,6 +19,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/Octogonapus/AWSMQTT.jl",
+    repo="github.com/Octogonapus/AWSCRT.jl",
     devbranch="main",
 )

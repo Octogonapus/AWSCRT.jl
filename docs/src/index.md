@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = AWSMQTT
+CurrentModule = AWSCRT
 ```
 
-# AWSMQTT
+# AWSCRT
 
-Documentation for [AWSMQTT](https://github.com/Octogonapus/AWSMQTT.jl).
+Documentation for [AWSCRT](https://github.com/Octogonapus/AWSCRT.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [AWSMQTT]
+Modules = [AWSCRT]
 ```
