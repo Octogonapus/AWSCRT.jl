@@ -5,8 +5,6 @@ ENV["AWS_CRT_LOG_PATH"] = joinpath(@__DIR__, "log.txt")
 using Test, AWSCRT, AWSCRT.LibAWSCRT
 import Random
 
-const client_id = Random.randstring(48)
-
 @testset "AWSCRT" begin
     @testset "MQTT pub/sub integration test" begin
         topic1 = "test-topic"
@@ -34,7 +32,7 @@ const client_id = Random.randstring(48)
             connection,
             ENV["ENDPOINT"],
             8883,
-            client_id;
+            Random.randstring(48);
             will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
             on_connection_interrupted = (conn, error_code) -> begin
                 @warn "connection interrupted" error_code
