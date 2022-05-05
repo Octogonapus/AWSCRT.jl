@@ -305,7 +305,7 @@ function connect(
 
         # The lifetime of the on_connection_interrupted FCB and its token is the same as the lifetime of the connection
         connection.on_connection_interrupted_refs =
-            [Ref(on_connection_interrupted_cb), on_connection_interrupted_token]
+            [Ref(on_connection_interrupted_fcb), on_connection_interrupted_token]
 
         on_connection_interrupted_cb, on_connection_interrupted_token
     else
@@ -321,7 +321,7 @@ function connect(
             @cfunction(on_connection_resumed, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Ptr{Cvoid}))
 
         # The lifetime of the on_connection_resumed FCB and its token is the same as the lifetime of the connection
-        connection.on_connection_resumed_refs = [Ref(on_connection_resumed_cb), on_connection_resumed_token]
+        connection.on_connection_resumed_refs = [Ref(on_connection_resumed_fcb), on_connection_resumed_token]
 
         on_connection_resumed_cb, on_connection_resumed_token
     else
