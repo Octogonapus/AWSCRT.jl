@@ -116,4 +116,7 @@ export unsubscribe
 export resubscribe_existing_topics
 export publish
 
+include("IOTShadow.jl")
+export ShadowClient
+
 end
