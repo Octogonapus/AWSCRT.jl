@@ -1,3 +1,16 @@
+const subscribe_callback_docs = "Callback invoked when message received. See [`OnMessage`](@ref) for the required signature."
+const subscribe_qos_docs = "Maximum requested QoS that server may use when sending messages to the client. The server may grant a lower QoS in the SUBACK (see returned task)."
+const subscribe_return_docs = """Returns a task and the ID of the SUBSCRIBE packet.
+The task completes when a SUBACK is received from the server.
+
+If successful, the task will contain a dict with the following members:
+- `:packet_id (Int)`: ID of the SUBSCRIBE packet being acknowledged.
+- `:topic (String)`: Topic filter of the SUBSCRIBE packet being acknowledged.
+- `:qos (aws_mqtt_qos)`: Maximum QoS that was granted by the server. This may be lower than the requested QoS.
+
+If unsuccessful, the task contains an exception."""
+
+
 """
     MQTTClient(
         tls_ctx::Union{ClientTLSContext,Nothing},
@@ -76,7 +89,7 @@ Arguments:
 - `topic (String)`: Topic receiving message.
 - `payload (String)`: Payload of message.
 - `dup (Bool)`: DUP flag. If True, this might be re-delivery of an earlier attempt to send the message.
-- `qos (aws_mqtt_qos)`: Quality of Service used to deliver the message.
+- `qos (aws_mqtt_qos)`: $subscribe_qos_docs
 - `retain (Bool)`: Retain flag. If `true`, the message was sent as a result of a new subscription being made by the client.
 
 Returns `nothing`.
@@ -561,20 +574,12 @@ Once subscribed, `callback` is invoked each time a message matching the `topic` 
 possible for such messages to arrive before the SUBACK is received.
 
 Arguments:
-- `connection`: Connection to use.
-- `topic`: Subscribe to this topic filter, which may include wildcards.
-- `qos`: Maximum requested QoS that server may use when sending messages to the client. The server may grant a lower QoS in the SUBACK (see returned task).
-- `callback`: Optional callback invoked when message received. See [`OnMessage`](@ref) for the required signature.
+- `connection (MQTTConnection)`: Connection to use.
+- `topic (String)`: Subscribe to this topic filter, which may include wildcards.
+- `qos (aws_mqtt_qos)`: $subscribe_qos_docs
+- `callback (OnMessage)`: $subscribe_callback_docs
 
-Returns a task and the ID of the SUBSCRIBE packet.
-The task completes when a SUBACK is received from the server.
-
-If successful, the task will contain a dict with the following members:
-- `:packet_id (Int)`: ID of the SUBSCRIBE packet being acknowledged.
-- `:topic (String)`: Topic filter of the SUBSCRIBE packet being acknowledged.
-- `:qos (aws_mqtt_qos)`: Maximum QoS that was granted by the server. This may be lower than the requested QoS.
-
-If unsuccessful, the task contains an exception.
+$subscribe_return_docs
 """
 function subscribe(connection::MQTTConnection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
     on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
@@ -653,8 +658,8 @@ end
 Set callback to be invoked when ANY message is received.
 
 Arguments:
-- `connection`: Connection to use.
-- `callback`: Optional callback invoked when message received. See [`OnMessage`](@ref) for the required signature. Set to `nothing` to clear this callback.
+- `connection (MQTTConnection)`: Connection to use.
+- `callback (Union{OnMessage,Nothing})`: Optional callback invoked when message received. See [`OnMessage`](@ref) for the required signature. Set to `nothing` to clear this callback.
 
 Returns nothing.
 """
@@ -728,6 +733,14 @@ function on_unsubscribe_complete(
     return nothing
 end
 
+const unsubscribe_return_docs = """Returns a task and the ID of the UNSUBSCRIBE packet.
+The task completes when an UNSUBACK is received from the server.
+
+If successful, the task will contain a dict with the following members:
+- `:packet_id (Int)`: ID of the UNSUBSCRIBE packet being acknowledged.
+
+If unsuccessful, the task will throw an exception."""
+
 """
     unsubscribe(connection::MQTTConnection, topic::String)
 
@@ -735,16 +748,10 @@ Unsubscribe from a topic filter (async).
 The client sends an UNSUBSCRIBE packet, and the server responds with an UNSUBACK.
 
 Arguments:
-- `connection`: Connection to use.
-- `topic`: Unsubscribe from this topic filter.
+- `connection (MQTTConnection)`: Connection to use.
+- `topic (String)`: Unsubscribe from this topic filter.
 
-Returns a task and the ID of the UNSUBSCRIBE packet.
-The task completes when an UNSUBACK is received from the server.
-
-If successful, the task will contain a dict with the following members:
-- `:packet_id (Int)`: ID of the UNSUBSCRIBE packet being acknowledged.
-
-If unsuccessful, the task will throw an exception.
+$unsubscribe_return_docs
 """
 function unsubscribe(connection::MQTTConnection, topic::String)
     ch = Channel(1)
@@ -978,19 +985,7 @@ function on_publish_complete(
     return nothing
 end
 
-"""
-    publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
-
-Publish message (async).
-If the device is offline, the PUBLISH packet will be sent once the connection resumes.
-
-Arguments:
-- `connection`: Connection to use.
-- `topic`: Topic name.
-- `payload`: Contents of message.
-- `qos`: Quality of Service for delivering this message.
-- `retain`: If `true`, the server will store the message and its QoS so that it can be delivered to future subscribers whose subscriptions match its topic name.
-
+const publish_return_docs = """
 Returns a task and the ID of the PUBLISH packet.
 The QoS determines when the task completes:
 - For QoS 0, completes as soon as the packet is sent.
@@ -1000,7 +995,22 @@ The QoS determines when the task completes:
 If successful, the task will contain a dict with the following members:
 - `:packet_id (Int)`: ID of the PUBLISH packet that is complete.
 
-If unsuccessful, the task will throw an exception.
+If unsuccessful, the task will throw an exception."""
+
+"""
+    publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
+
+Publish message (async).
+If the device is offline, the PUBLISH packet will be sent once the connection resumes.
+
+Arguments:
+- `connection (MQTTConnection)`: Connection to use.
+- `topic (String)`: Topic name.
+- `payload (String)`: Contents of message.
+- `qos (aws_mqtt_qos)`: $subscribe_qos_docs
+- `retain (Bool)`: If `true`, the server will store the message and its QoS so that it can be delivered to future subscribers whose subscriptions match its topic name.
+
+$publish_return_docs
 """
 function publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
     ch = Channel(1)
