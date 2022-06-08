@@ -246,4 +246,40 @@ end
             fetch(publish(shadow, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE))
         end
     end
+
+    @testset "resubscribe with no prior subscriptions" begin
+        # test for https://github.com/awslabs/aws-c-mqtt/issues/213
+
+        tls_ctx_options = create_client_with_mtls(
+            ENV["CERT_STRING"],
+            ENV["PRI_KEY_STRING"],
+            ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
+        )
+        tls_ctx = ClientTLSContext(tls_ctx_options)
+        client = MQTTClient(tls_ctx)
+        connection = MQTTConnection(client)
+
+        task = connect(
+            connection,
+            ENV["ENDPOINT"],
+            8883,
+            Random.randstring(48);
+            on_connection_interrupted = (conn, error_code) -> begin
+                @warn "MQTT connection interrupted: $(AWSCRT.aws_err_string(error_code))"
+            end,
+            on_connection_resumed = (conn, return_code, session_present) -> begin
+                @info "MQTT connection resumed" return_code session_present
+                resub_task = resubscribe_existing_topics(conn)
+                @async begin
+                    resub_task_result = fetch(resub_task)
+                    @info "Resubscribed existing topics" resub_task_result
+                end
+            end,
+        )
+        @test fetch(task) == Dict(:session_present => false)
+
+        task, id = publish(connection, "unauthorized-topic", "some data", AWS_MQTT_QOS_AT_LEAST_ONCE)
+        @test_throws TaskFailedException fetch(task)
+        sleep(5)
+    end
 end
