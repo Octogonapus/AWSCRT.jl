@@ -66,7 +66,7 @@ jobs:
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - run: |
-          julia --project -e 'import Pkg; Pkg.dev(".."); Pkg.instantiate(); Pkg.build();'
+          julia --project -e 'import Pkg; Pkg.develop(path=".."); Pkg.instantiate(); Pkg.build();'
           MQTT_ENABLED=false julia --project=sysimage -e 'import Pkg; Pkg.instantiate(); Pkg.build(); include(joinpath("sysimage", "build_sysimage.jl")); build()'
           MQTT_ENABLED=true julia -J sysimage/sysimage.so -e 'import Foo; Foo.start()'
         working-directory: test_sysimage
