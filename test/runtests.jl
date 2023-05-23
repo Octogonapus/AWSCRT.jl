@@ -17,10 +17,11 @@ end
 
 @testset "AWSCRT" begin
     @testset "MQTT pub/sub integration test" begin
-        topic1 = "test-topic"
+        topic1 = "test-topic-$(Random.randstring(6))"
         payload1 = Random.randstring(48)
-        client_id = Random.randstring(48)
-        @show topic1 payload1 client_id
+        client_id1 = Random.randstring(48)
+        client_id2 = Random.randstring(48)
+        @show topic1 payload1 client_id1 client_id2
         tls_ctx_options = create_client_with_mtls(
             ENV["CERT_STRING"],
             ENV["PRI_KEY_STRING"],
@@ -44,7 +45,7 @@ end
             connection,
             ENV["ENDPOINT"],
             8883,
-            client_id;
+            client_id1;
             will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
             on_connection_interrupted = (conn, error_code) -> begin
                 @warn "connection interrupted" error_code
@@ -110,7 +111,7 @@ end
             connection,
             ENV["ENDPOINT"],
             8883,
-            "test-client-id2";
+            client_id2;
             will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
         )
         @test fetch(task) == Dict(:session_present => false)
