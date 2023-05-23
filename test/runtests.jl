@@ -19,6 +19,8 @@ end
     @testset "MQTT pub/sub integration test" begin
         topic1 = "test-topic"
         payload1 = Random.randstring(48)
+        client_id = Random.randstring(48)
+        @show topic1 payload1 client_id
         tls_ctx_options = create_client_with_mtls(
             ENV["CERT_STRING"],
             ENV["PRI_KEY_STRING"],
@@ -42,7 +44,7 @@ end
             connection,
             ENV["ENDPOINT"],
             8883,
-            Random.randstring(48);
+            client_id;
             will = Will(topic1, AWS_MQTT_QOS_AT_LEAST_ONCE, "The client has gone offline!", false),
             on_connection_interrupted = (conn, error_code) -> begin
                 @warn "connection interrupted" error_code
