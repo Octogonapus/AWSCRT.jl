@@ -25,7 +25,7 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
@@ -42,11 +42,44 @@ jobs:
         with:
           file: ./lcov.info
           fail_ci_if_error: false
+
+  test_sysimage:
+    name: test_sysimage ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - "1.7"
+          - "1.9"
+        os:
+          - ubuntu-latest
+          - macOS-latest
+        arch:
+          - x64
+    steps:
+      - uses: actions/checkout@v3
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      - uses: julia-actions/cache@v1
+      - uses: julia-actions/julia-buildpkg@v1
+      - run: |
+          julia --project -e 'import Pkg; Pkg.dev(".."); Pkg.instantiate(); Pkg.build();'
+          MQTT_ENABLED=false julia --project=sysimage -e 'import Pkg; Pkg.instantiate(); Pkg.build(); include(joinpath("sysimage", "build_sysimage.jl")); build()'
+          MQTT_ENABLED=true julia -J sysimage/sysimage.so -e 'import Foo; Foo.start()'
+        working-directory: test_sysimage
+        env:
+          ENDPOINT: ${{ secrets.ENDPOINT }}
+          CERT_STRING: ${{ secrets.CERT_STRING }}
+          PRI_KEY_STRING: ${{ secrets.PRI_KEY_STRING }}
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@v1
         with:
           version: "1"

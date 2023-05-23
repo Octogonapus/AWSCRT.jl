@@ -1,0 +1,6 @@
+name = "Foo"
+uuid = "97f99e65-a432-4aef-bc58-bf7726a8fb32"
+version = "0.1.0"
+
+[deps]
+AWSCRT = "df31ea59-17a4-4ebd-9d69-4f45266dc2c7"
