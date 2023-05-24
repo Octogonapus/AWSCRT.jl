@@ -68,7 +68,7 @@ jobs:
       - run: |
           julia --project -e 'import Pkg; Pkg.develop(path=".."); Pkg.instantiate(); Pkg.build();'
           MQTT_ENABLED=false julia --project=sysimage -e 'import Pkg; Pkg.instantiate(); Pkg.build(); include(joinpath("sysimage", "build_sysimage.jl")); build()'
-          MQTT_ENABLED=true julia -J sysimage/sysimage.so -e 'import Foo; Foo.start()'
+          MQTT_ENABLED=true julia -J sysimage/sysimage.so -e 'Foo.start()'
         working-directory: test_sysimage
         env:
           ENDPOINT: ${{ secrets.ENDPOINT }}
