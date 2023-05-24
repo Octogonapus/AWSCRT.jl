@@ -1,0 +1,2 @@
+using Foo
+Foo.start()
