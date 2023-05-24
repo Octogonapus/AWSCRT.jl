@@ -30,6 +30,7 @@ function start()
             end,
         )
         resp = fetch(task)
+        @show resp
         if resp != Dict(:session_present => false)
             error("connect returned bad response: $resp")
         end
