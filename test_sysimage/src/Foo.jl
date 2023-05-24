@@ -10,7 +10,7 @@ function start()
         tls_ctx_options = create_client_with_mtls(
             ENV["CERT_STRING"],
             ENV["PRI_KEY_STRING"],
-            ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
+            ca_filepath = joinpath(dirname(dirname(@__DIR__)), "test", "certs", "AmazonRootCA1.pem"),
         )
         tls_ctx = ClientTLSContext(tls_ctx_options)
         client = MQTTClient(tls_ctx)
