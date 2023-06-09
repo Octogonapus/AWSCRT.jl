@@ -250,3 +250,15 @@ end
         end
     end
 end
+
+@testset "lock and unlock" begin
+    sf = empty_shadow_framework(Dict())
+    lock(sf)
+    lock(sf) # must be reentrant
+    @test true
+    unlock(sf)
+    lock(sf) do
+        lock(sf) # must be reentrant
+        @test true
+    end
+end
