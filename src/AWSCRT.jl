@@ -12,6 +12,7 @@ module AWSCRT
 
 using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum, JSON
 import Base: lock, unlock
+export lock, unlock
 
 const _AWSCRT_ALLOCATOR = Ref{Union{Ptr{aws_allocator},Nothing}}(nothing)
 const _GLOBAL_REFS = Vector{Ref}()
