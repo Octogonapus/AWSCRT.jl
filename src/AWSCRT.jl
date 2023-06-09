@@ -6,7 +6,7 @@ Environment variables:
   - `AWS_CRT_LOG_LEVEL`: Set to `0` through `6` to enable logging. Default is off. See [`aws_log_level`](@ref).
   - `AWS_CRT_LOG_PATH`: Set to the log file path. Must be set if `AWS_CRT_LOG_LEVEL` is set.
 
-Note: all the symbols in this package that begin with underscores are private and not part of this package's published interface. Please don't use them.
+Note: all the symbols in this package that begin with underscores are private and are not part of this package's published interface. Please don't use them.
 """
 module AWSCRT
 
