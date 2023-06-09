@@ -93,9 +93,30 @@ Arguments:
 $subscribe_return_docs
 """
 function subscribe(client::ShadowClient, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
-    @debug "subscribing to" "$(client.shadow_topic_prefix)$topic"
+    @debug "subscribing to $(client.shadow_topic_prefix)$topic"
     return subscribe(client.connection, "$(client.shadow_topic_prefix)$topic", qos, callback)
 end
+
+const _UNSUBCRIBE_TOPICS = [
+    # If the wildcard topics are unsubscribed from after the other topics, the CRT segfaults
+    "/get/#",
+    "/update/#",
+    "/delete/#",
+    # Non-wildcard topics below...
+    "/get",
+    "/get/accepted",
+    "/get/rejected",
+    "/update",
+    "/update/delta",
+    "/update/accepted",
+    "/update/documents",
+    "/update/rejected",
+    "/delete",
+    "/delete/accepted",
+    "/delete/rejected",
+]
+
+const _iot_shadow_unsubscribe_return_docs = "Returns a list of the tasks from each unsubscribe call."
 
 """
     unsubscribe(client::ShadowClient)
@@ -103,12 +124,20 @@ end
 Unsubscribes from the shadow document topics.
 
 Arguments:
-- `client (ShadowClient)`: Shadow client to use.
 
-$unsubscribe_return_docs
+  - `client (ShadowClient)`: Shadow client to use.
+
+$_iot_shadow_unsubscribe_return_docs
 """
 function unsubscribe(client::ShadowClient)
-    return unsubscribe(client.connection, "$(client.shadow_topic_prefix)/#")
+    # there is no function in the CRT to get the current topics (though they are stored internally)
+    # so we need to unsubscribe from every possible topic
+    out = []
+    for topic in _UNSUBCRIBE_TOPICS
+        @debug "unsubscribing from $(client.shadow_topic_prefix)$topic"
+        push!(out, unsubscribe(client.connection, "$(client.shadow_topic_prefix)$topic"))
+    end
+    return out
 end
 
 """

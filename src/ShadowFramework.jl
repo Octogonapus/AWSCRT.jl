@@ -196,7 +196,7 @@ end
 
 Unsubscribes from the shadow document's topics and stops processing updates.
 
-Returns the return value from the call to [`unsubscribe`](@ref).
+$_iot_shadow_unsubscribe_return_docs
 """
 unsubscribe(sf::ShadowFramework{T}) where {T} = unsubscribe(sf._shadow_client)
 
@@ -228,11 +228,9 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # process any delta state from when we last reported our current state. if something changed, report our
             # current state again. there's a chance the delta state is permanent due to the user's configuration
             # (isequals implementation, struct definition, etc.). we need to avoid endless communications.
-            updated = _update_local_shadow_from_get!(sf, payload)
+            @show updated = _update_local_shadow_from_get!(sf, payload)
             if updated
-                current_state = _create_reported_state_payload(sf)
-                @debug "SF-$(sf._id): publishing shadow update" current_state
-                task, id = publish(shadow_client, "/update", current_state, AWS_MQTT_QOS_AT_LEAST_ONCE)
+                task, id = publish_current_state(sf)
                 task_result = fetch(task)
                 @debug id task_result
             end
@@ -251,9 +249,7 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # we still need to check updated here, because there's a chance the delta state is permanent due to the
             # user's configuration (isequals implementation, struct definition, etc.). we need to avoid endless communications.
             if updated
-                current_state = _create_reported_state_payload(sf)
-                @debug "SF-$(sf._id): publishing shadow update" current_state
-                task, id = publish(shadow_client, "/update", current_state, AWS_MQTT_QOS_AT_LEAST_ONCE)
+                task, id = publish_current_state(sf)
                 task_result = fetch(task)
                 @debug id task_result
             end
