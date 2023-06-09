@@ -1,10 +1,3 @@
-# integ tests
-# unnamed and named shadows
-# creating shadow
-# sequence of updates
-# receive initial msg on subscribe(sf, ...)
-# callbacks are invoked
-
 struct OOBShadowClient
     shadow_client::ShadowClient
     msgs::Vector{Any}
