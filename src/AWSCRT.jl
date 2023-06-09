@@ -1,13 +1,17 @@
 """
 Environment variables:
-- `AWS_CRT_MEMORY_TRACING`: Set to `0`, `1`, or `2` to enable memory tracing. Default is off. See [`aws_mem_trace_level`](@ref).
-- `AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK`: Set the number of frames per stack for memory tracing. Default is the AWS library's default.
-- `AWS_CRT_LOG_LEVEL`: Set to `0` through `6` to enable logging. Default is off. See [`aws_log_level`](@ref).
-- `AWS_CRT_LOG_PATH`: Set to the log file path. Must be set if `AWS_CRT_LOG_LEVEL` is set.
+
+  - `AWS_CRT_MEMORY_TRACING`: Set to `0`, `1`, or `2` to enable memory tracing. Default is off. See [`aws_mem_trace_level`](@ref).
+  - `AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK`: Set the number of frames per stack for memory tracing. Default is the AWS library's default.
+  - `AWS_CRT_LOG_LEVEL`: Set to `0` through `6` to enable logging. Default is off. See [`aws_log_level`](@ref).
+  - `AWS_CRT_LOG_PATH`: Set to the log file path. Must be set if `AWS_CRT_LOG_LEVEL` is set.
+
+Note: all the symbols in this package that begin with underscores are private and not part of this package's published interface. Please don't use them.
 """
 module AWSCRT
 
-using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum
+using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum, JSON
+import Base: lock, unlock
 
 const _AWSCRT_ALLOCATOR = Ref{Union{Ptr{aws_allocator},Nothing}}(nothing)
 const _GLOBAL_REFS = Vector{Ref}()
@@ -83,9 +87,10 @@ end
 
 aws_err_string(code = aws_last_error()) = "AWS Error $code: " * Base.unsafe_string(aws_error_debug_str(code))
 
-const advanced_use_note = "Note on advanced use: the internal constructor on this struct has been left at its " * 
-"default so that you can bring your own native data if you need to. However, you are then responsible for the " * 
-"memory management of that data."
+const advanced_use_note =
+    "Note on advanced use: the internal constructor on this struct has been left at its " *
+    "default so that you can bring your own native data if you need to. However, you are then responsible for the " *
+    "memory management of that data."
 
 include("AWSIO.jl")
 export EventLoopGroup
@@ -118,5 +123,9 @@ export publish
 
 include("IOTShadow.jl")
 export ShadowClient
+
+include("ShadowFramework.jl")
+export ShadowFramework
+export shadow_client
 
 end

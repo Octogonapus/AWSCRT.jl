@@ -7,14 +7,21 @@ Device Shadow service client.
 [AWS Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/iot-device-shadows.html).
 
 Arguments:
-- `connection (MQTTConnection)`: MQTT connection to publish and subscribe on.
+
+  - `connection (MQTTConnection)`: MQTT connection to publish and subscribe on.
+  - `thing_name (String)`: Name of the Thing in AWS IoT under which the shadow document will exist.
+  - `shadow_name (Union{String,Nothing})`: Shadow name for a named shadow document or `nothing` for an unnamed shadow document.
 """
 mutable struct ShadowClient
     connection::MQTTConnection
-    shadow_topic_prefix::Union{String,Nothing}
+    shadow_topic_prefix::String
 
-    function ShadowClient(connection::MQTTConnection)
-        new(connection, nothing)
+    function ShadowClient(connection::MQTTConnection, thing_name::String, shadow_name::Union{String,Nothing})
+        new(
+            connection,
+            shadow_name === nothing ? "\$aws/things/$thing_name/shadow" :
+            "\$aws/things/$thing_name/shadow/name/$shadow_name",
+        )
     end
 end
 
@@ -43,13 +50,7 @@ Returns `nothing`.
 const OnShadowMessage = Function
 
 """
-    subscribe(
-        client::ShadowClient,
-        thing_name::String,
-        shadow_name::Union{String,Nothing},
-        qos::aws_mqtt_qos,
-        callback::OnShadowMessage,
-    )
+    subscribe(client::ShadowClient, qos::aws_mqtt_qos, callback::OnShadowMessage)
 
 Subscribes to all topics under the given shadow document using a wildcard, including but not limited to:
 - `/get/accepted`
@@ -63,30 +64,37 @@ Subscribes to all topics under the given shadow document using a wildcard, inclu
 
 Arguments:
 - `client (ShadowClient)`: Shadow client to use.
-- `thing_name (String)`: Name of the Thing in AWS IoT.
-- `shadow_name (Union{String,Nothing})`: Shadow name for a named shadow document or `nothing` for an unnamed shadow document.
 - `qos (aws_mqtt_qos)`: $subscribe_qos_docs
 - `callback (OnShadowMessage)`: Callback invoked when message received. See [`OnShadowMessage`](@ref) for the required signature.
 
 Returns the tasks from each subscribe call (`/get/#`, `/update/#`, and `/delete/#`).
 """
-function subscribe(
-    client::ShadowClient,
-    thing_name::String,
-    shadow_name::Union{String,Nothing},
-    qos::aws_mqtt_qos,
-    callback::OnShadowMessage,
-)
-    client.shadow_topic_prefix =
-        shadow_name === nothing ? "\$aws/things/$thing_name/shadow" :
-        "\$aws/things/$thing_name/shadow/name/$shadow_name"
+function subscribe(client::ShadowClient, qos::aws_mqtt_qos, callback::OnShadowMessage)
     mqtt_callback =
         (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) ->
             callback(client, topic, payload, dup, qos, retain)
-    getf = subscribe(client.connection, "$(client.shadow_topic_prefix)/get/#", qos, mqtt_callback)
-    updatef = subscribe(client.connection, "$(client.shadow_topic_prefix)/update/#", qos, mqtt_callback)
-    deletef = subscribe(client.connection, "$(client.shadow_topic_prefix)/delete/#", qos, mqtt_callback)
+    getf = subscribe(client, "/get/#", qos, mqtt_callback)
+    updatef = subscribe(client, "/update/#", qos, mqtt_callback)
+    deletef = subscribe(client, "/delete/#", qos, mqtt_callback)
     return getf, updatef, deletef
+end
+
+"""
+    subscribe(client::ShadowClient, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
+
+Subscribes to the given `topic` (must contain a leading forward slash (`/`)) under the given shadow document.
+
+Arguments:
+- `client (ShadowClient)`: Shadow client to use.
+- `topic (String)`: Subscribe to this topic filter, which may include wildcards, under the given shadow document.
+- `qos (aws_mqtt_qos)`: $subscribe_qos_docs
+- `callback (OnMessage)`: $subscribe_callback_docs
+
+$subscribe_return_docs
+"""
+function subscribe(client::ShadowClient, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
+    @debug "subscribing to" "$(client.shadow_topic_prefix)$topic"
+    return subscribe(client.connection, "$(client.shadow_topic_prefix)$topic", qos, callback)
 end
 
 """
@@ -100,9 +108,7 @@ Arguments:
 $unsubscribe_return_docs
 """
 function unsubscribe(client::ShadowClient)
-    topic = client.shadow_topic_prefix
-    client.shadow_topic_prefix = nothing
-    return unsubscribe(client.connection, "$topic/#")
+    return unsubscribe(client.connection, "$(client.shadow_topic_prefix)/#")
 end
 
 """
