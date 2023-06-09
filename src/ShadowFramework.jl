@@ -228,7 +228,7 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # process any delta state from when we last reported our current state. if something changed, report our
             # current state again. there's a chance the delta state is permanent due to the user's configuration
             # (isequals implementation, struct definition, etc.). we need to avoid endless communications.
-            @show updated = _update_local_shadow_from_get!(sf, payload)
+            updated = _update_local_shadow_from_get!(sf, payload)
             if updated
                 task, id = publish_current_state(sf)
                 task_result = fetch(task)
