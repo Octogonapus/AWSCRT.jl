@@ -1,5 +1,5 @@
-const subscribe_callback_docs = "Callback invoked when message received. See [`OnMessage`](@ref) for the required signature."
-const subscribe_qos_docs = "Maximum requested QoS that server may use when sending messages to the client. The server may grant a lower QoS in the SUBACK (see returned task)."
+const subscribe_callback_docs = "Callback invoked when a message is received. See [`OnMessage`](@ref) for the required signature."
+const subscribe_qos_docs = "Maximum requested QoS that the server may use when sending messages to the client. The server may grant a lower QoS in the SUBACK (see returned task)."
 const subscribe_return_docs = """Returns a task and the ID of the SUBSCRIBE packet.
 The task completes when a SUBACK is received from the server.
 

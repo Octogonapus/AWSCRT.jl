@@ -41,7 +41,7 @@ Arguments:
 - `shadow_client (ShadowClient)`: Shadow client that received the message.
 - `topic (String)`: Topic receiving message.
 - `payload (String)`: Payload of message.
-- `dup (Bool)`: DUP flag. If True, this might be re-delivery of an earlier attempt to send the message.
+- `dup (Bool)`: DUP flag. If `true`, this might be re-delivery of an earlier attempt to send the message.
 - `qos (aws_mqtt_qos)`: $subscribe_qos_docs
 - `retain (Bool)`: Retain flag. If `true`, the message was sent as a result of a new subscription being made by the client.
 
