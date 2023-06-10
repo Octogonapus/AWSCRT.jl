@@ -121,11 +121,10 @@ const _iot_shadow_unsubscribe_return_docs = "Returns a list of the tasks from ea
 """
     unsubscribe(client::ShadowClient)
 
-Unsubscribes from the shadow document topics.
+Unsubscribes from all shadow document topics.
 
 Arguments:
-
-  - `client (ShadowClient)`: Shadow client to use.
+- `client (ShadowClient)`: Shadow client to use.
 
 $_iot_shadow_unsubscribe_return_docs
 """

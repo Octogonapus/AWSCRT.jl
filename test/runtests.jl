@@ -1,3 +1,5 @@
+rm(joinpath(@__DIR__, "log.txt"); force = true)
+
 ENV["AWS_CRT_MEMORY_TRACING"] = "1"
 ENV["AWS_CRT_LOG_LEVEL"] = "6"
 ENV["AWS_CRT_LOG_PATH"] = joinpath(@__DIR__, "log.txt")

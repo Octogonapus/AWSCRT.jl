@@ -124,6 +124,7 @@ export publish
 
 include("IOTShadow.jl")
 export ShadowClient
+export OnShadowMessage
 
 include("ShadowFramework.jl")
 export ShadowFramework
