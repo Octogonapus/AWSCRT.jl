@@ -22,8 +22,6 @@ jobs:
           - x64
     steps:
       - uses: actions/checkout@v3
-      # serialize tests because they use the unnamed shadow which is shared
-      - uses: ben-z/gh-action-mutex@v1.0-alpha-7
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
