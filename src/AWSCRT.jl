@@ -127,6 +127,10 @@ export ShadowClient
 
 include("ShadowFramework.jl")
 export ShadowFramework
+export ShadowDocumentPropertyUpdateCallback
+export ShadowDocumentPreUpdateCallback
+export ShadowDocumentPostUpdateCallback
 export shadow_client
+export publish_current_state
 
 end
