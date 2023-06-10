@@ -23,9 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       # serialize tests because they use the unnamed shadow which is shared
-      - uses: softprops/turnstyle@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ben-z/gh-action-mutex@v1.0-alpha-7
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
