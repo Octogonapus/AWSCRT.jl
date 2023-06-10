@@ -100,13 +100,21 @@ Arguments:
   - `shadow_name (Union{String,Nothing})`: Shadow name for a named shadow document or `nothing` for an unnamed shadow document.
   - `shadow_document (T)`: The local shadow document. This can be an `AbstractDict` or a mutable struct.
     This must include keys/properties for all keys in the shadow documents published by the broker.
-    If this type is not an AbstractDict and is missing a property in the desired shadow document state, an error will
-    be logged and there will be a permanent difference between the reported and desired state, causing excessive communications.
+    If this type is not an AbstractDict and is missing a property of the desired shadow document state, an error will
+    be logged and there will be a permanent difference between the reported and desired state.
     This must also include a `version (Int)` key/property which will store the shadow document version.
     It is recommended that you persist this to disk.
     You can write the latest state to disk inside `shadow_document_post_update_callback`.
     You should also then load it from disk and pass it as this parameter during the start of your application.
-  - `shadow_document_property_callbacks (Dict{String,ShadowDocumentPropertyUpdateCallback})`: An optional set of callbacks. A given callback will be fired for each update to the shadow document property matching the given key. Note that the callback is fired only when shadow properties are changed. A shadow property change occurs when the value of the shadow property is changed to a new value which is not equal to the prior value. This is implemented using `!isequal()`. Please ensure a satisfactory definition (satifactory to your application's needs) of `isequal` for all types used in the shadow document. You will only need to worry about this if you are using custom JSON deserialization.
+  - `shadow_document_property_callbacks (Dict{String,ShadowDocumentPropertyUpdateCallback})`: An optional set of
+    callbacks. A given callback will be fired for each update to the shadow document property matching the given key.
+    Note that the callback is fired only when shadow properties are changed.
+    A shadow property change occurs when the value of the shadow property is changed to a new value which is not
+    equal to the prior value.
+    This is implemented using `!isequal()`.
+    Please ensure a satisfactory definition (satifactory to your application's needs) of `isequal` for all types
+    used in the shadow document.
+    You will only need to worry about this if you are using custom JSON deserialization.
   - `shadow_document_pre_update_callback (ShadowDocumentPreUpdateCallback)`: An optional callback which will be fired immediately before updating any shadow document properties. This is always fired, even if no shadow properties will be changed.
   - `shadow_document_post_update_callback (ShadowDocumentPostUpdateCallback)`: An optional callback which will be fired immediately after updating any shadow document properties. This is fired only if shadow properties were changed.
   - `id (Int)`: A unique ID which disambiguates log messages from multiple shadow frameworks.
@@ -171,9 +179,9 @@ shadow_client(sf::ShadowFramework) = sf._shadow_client
 Subscribes to the shadow document's topics and begins processing updates.
 The `sf` is always locked before reading/writing from/to the shadow document.
 If the remote shadow document does not exist, the local shadow document will be used to create it.
-Publishes and initial message to the `/get` topic to synchronize the shadow document with the broker's state.
+Publishes an initial message to the `/get` topic to synchronize the shadow document with the broker's state.
 
-Returns the return value of the call to [`publish`](@ref) used to publish the initial `/get`.
+$publish_return_docs
 """
 function subscribe(sf::ShadowFramework{T}) where {T}
     callback = _create_sf_callback(sf)
@@ -276,7 +284,6 @@ function _update_local_shadow_from_get!(sf::ShadowFramework{T}, payload_str::Str
         if state !== nothing
             delta = get(state, "delta", nothing)
             if delta !== nothing
-                @debug "updating shadow"
                 return _do_local_shadow_update!(sf, delta)
             end
         end
