@@ -1,21 +1,14 @@
 name: CI
+
 on:
-  push:
-    branches:
-      - main
-    tags: ["*"]
   pull_request:
-concurrency:
-  # Skip intermediate builds: always.
-  # Cancel intermediate builds: only if it is a pull request build.
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     # the tests use the same resources, so they can't run in parallel
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: "test @ ${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
       cancel-in-progress: false
     runs-on: ${{ matrix.os }}
     strategy:
@@ -49,6 +42,9 @@ jobs:
 
   test_sysimage:
     name: test_sysimage ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    concurrency:
+      group: "test_sysimage @ ${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+      cancel-in-progress: true
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
