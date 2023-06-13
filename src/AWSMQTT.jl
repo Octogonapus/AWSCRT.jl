@@ -10,7 +10,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task contains an exception.
 
-If there is no network connection, the task may wait forever."""
+If there is no MQTT connection or network connection, the task may wait forever."""
 
 """
     MQTTClient(
@@ -469,7 +469,7 @@ end
 
 Close the connection to the server (async).
 Returns a task which completes when the connection is closed.
-If there is no network connection, the task completes.
+If there is no MQTT connection or network connection, the task completes.
 The task will contain nothing.
 """
 function disconnect(connection::MQTTConnection)
@@ -753,7 +753,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task will throw an exception.
 
-If there is no network connection, the task may wait forever."""
+If there is no MQTT connection or network connection, the task may wait forever."""
 
 """
     unsubscribe(connection::MQTTConnection, topic::String)
@@ -1012,7 +1012,7 @@ If successful, the task will contain a dict with the following members:
 
 If unsuccessful, the task will throw an exception.
 
-If there is no network connection, the task may wait forever."""
+If there is no MQTT connection or network connection, the task may wait forever."""
 
 """
     publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
