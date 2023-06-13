@@ -116,7 +116,7 @@ const _UNSUBCRIBE_TOPICS = [
     "/delete/rejected",
 ]
 
-const _iot_shadow_unsubscribe_return_docs = "Returns a list of the tasks from each unsubscribe call."
+const _iot_shadow_unsubscribe_return_docs = "Returns a list of the tasks from each [`unsubscribe`](@ref) call."
 
 """
     unsubscribe(client::ShadowClient)

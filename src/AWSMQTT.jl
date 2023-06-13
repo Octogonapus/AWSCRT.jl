@@ -8,7 +8,9 @@ If successful, the task will contain a dict with the following members:
 - `:topic (String)`: Topic filter of the SUBSCRIBE packet being acknowledged.
 - `:qos (aws_mqtt_qos)`: Maximum QoS that was granted by the server. This may be lower than the requested QoS.
 
-If unsuccessful, the task contains an exception."""
+If unsuccessful, the task contains an exception.
+
+If there is no network connection, the task may wait forever."""
 
 """
     MQTTClient(
@@ -467,6 +469,7 @@ end
 
 Close the connection to the server (async).
 Returns a task which completes when the connection is closed.
+If there is no network connection, the task completes.
 The task will contain nothing.
 """
 function disconnect(connection::MQTTConnection)
@@ -748,7 +751,9 @@ The task completes when an UNSUBACK is received from the server.
 If successful, the task will contain a dict with the following members:
 - `:packet_id (Int)`: ID of the UNSUBSCRIBE packet being acknowledged.
 
-If unsuccessful, the task will throw an exception."""
+If unsuccessful, the task will throw an exception.
+
+If there is no network connection, the task may wait forever."""
 
 """
     unsubscribe(connection::MQTTConnection, topic::String)
@@ -1005,7 +1010,9 @@ The QoS determines when the task completes:
 If successful, the task will contain a dict with the following members:
 - `:packet_id (Int)`: ID of the PUBLISH packet that is complete.
 
-If unsuccessful, the task will throw an exception."""
+If unsuccessful, the task will throw an exception.
+
+If there is no network connection, the task may wait forever."""
 
 """
     publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
