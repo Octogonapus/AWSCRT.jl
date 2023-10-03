@@ -1,7 +1,7 @@
 # AWSCRT
 
 | :exclamation: This is unfinished, early software. Expect bugs and breakages! |
-|------------------------------------------------------------------------------|
+| ---------------------------------------------------------------------------- |
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://Octogonapus.github.io/AWSCRT.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://Octogonapus.github.io/AWSCRT.jl/dev)
@@ -11,6 +11,23 @@
 
 A high-level wrapper for the code in [LibAWSCRT.jl](https://github.com/Octogonapus/LibAWSCRT.jl).
 Currently, only an MQTT client is implemented.
+
+- [AWSCRT](#awscrt)
+  - [Installation](#installation)
+  - [MQTT Client](#mqtt-client)
+    - [Create a client](#create-a-client)
+    - [Connect a client](#connect-a-client)
+    - [Subscribe](#subscribe)
+    - [Publish](#publish)
+    - [Clean Up](#clean-up)
+    - [See Also](#see-also)
+  - [AWS IoT Device Shadow Service](#aws-iot-device-shadow-service)
+  - [Create a ShadowFramework](#create-a-shadowframework)
+    - [Using the ShadowFramework](#using-the-shadowframework)
+    - [Update Callbacks: Ordering and Other Behaviors](#update-callbacks-ordering-and-other-behaviors)
+    - [Persisting the Shadow Document Locally](#persisting-the-shadow-document-locally)
+    - [See Also](#see-also-1)
+
 
 ## Installation
 
@@ -104,3 +121,87 @@ fetch(task) # wait for the connection to be closed
 - [AWS Protocol Port Mapping and Authentication Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/protocols.html)
 - [AWS MQTT Topic Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/topics.html)
 - [AWS IoT Client Certificate Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/x509-client-certs.html)
+
+## AWS IoT Device Shadow Service
+
+The AWS IoT Device Shadow service adds persistent JSON documents you can use to e.g. manage device settings.
+This package provides both a high-level framework via the `ShadowFramework` and direct access via the `ShadowClient` object.
+
+## Create a ShadowFramework
+
+The `ShadowFramework` object must first be created.
+
+```julia
+mqtt_connection = ... # create this yourself
+thing_name = "thing1"
+shadow_name = "settings"
+doc = Dict()
+sf = ShadowFramework(mqtt_connection, thing_name, shadow_name, doc)
+```
+
+### Using the ShadowFramework
+
+```julia
+subscribe(sf) # Subscribe to all the shadow service topics and perform any initial state updates
+
+lock(sf) do
+    doc["k1"] = "v1" # update our copy of the shadow document
+end
+
+publish_current_state(sf) # tell the shadow service about it
+```
+
+These updates go both ways. Shadow document updates from the service are received asynchronously and the local
+shadow document is updated automatically. The remote state is always reconciled with the local state.
+
+### Update Callbacks: Ordering and Other Behaviors
+
+If you need to take action before, during, or after a local shadow document update, there are callbacks available.
+
+```julia
+cbs = Dict(
+    # This callback will run whenever the key `foo` is updated. We can do whatever we want, including update the
+    # shadow document itself, but be careful about potential update order conflicts and deadlocks if you jump to
+    # another thread and then update the shadow document.
+    "foo" => it -> do_something(it)
+)
+sf = ShadowFramework(...; shadow_document_property_callbacks = cbs)
+```
+
+### Persisting the Shadow Document Locally
+
+The post-update callback is great for persisting the shadow document to the local disk:
+
+```julia
+doc = Dict()
+sf = ShadowFramework(
+    ...,
+    doc;
+    shadow_document_post_update_callback = doc -> write(shadow_path, serialize_shadow(doc))
+)
+```
+
+The function `serialize_shadow` is a modified `JSON` serializer which handles version numbers better:
+
+```julia
+import JSON.Serializations: CommonSerialization, StandardSerialization
+import JSON.Writer: StructuralContext, show_json
+
+# Custom serialization for shadow documents so that version numbers serialize cleanly
+struct ShadowSerialization <: CommonSerialization end
+
+function show_json(io::StructuralContext, ::ShadowSerialization, f::VersionNumber)
+    show_json(io, StandardSerialization(), string(f))
+end
+
+serialize_shadow(shadow) = sprint(show_json, ShadowSerialization(), shadow)
+
+deserialize_shadow(text) = JSON.parse(text)
+```
+
+The next time your application starts, it can initialize the shadow document with the value from `deserialize_shadow`.
+Pass that value in to the `ShadowFramework` when creating it and run `subscribe` as usual.
+
+### See Also
+
+- [AWS IoT Device Shadow Service Documentation](https://docs.aws.amazon.com/iot/latest/developerguide/iot-device-shadows.html)
