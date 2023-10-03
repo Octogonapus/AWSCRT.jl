@@ -443,6 +443,7 @@ end
     end
 
     @testset "desired state that can't be reconciled with the local shadow doesn't cause excessive publishing" begin
+        @warn "Missing property errors are expected in this test"
         connection = new_mqtt_connection()
         shadow_name = random_shadow_name()
         doc = ShadowDocMissingProperty(1, 0)
