@@ -5,11 +5,12 @@ ENV["AWS_CRT_LOG_LEVEL"] = "6"
 ENV["AWS_CRT_LOG_PATH"] = joinpath(@__DIR__, "log.txt")
 ENV["JULIA_DEBUG"] = "AWSCRT"
 
-using Test, AWSCRT, AWSCRT.LibAWSCRT, JSON, CountDownLatches, Random
+using Test, AWSCRT, AWSCRT.LibAWSCRT, JSON, CountDownLatches, Random, Documenter
 
 include("util.jl")
 
 @testset "AWSCRT" begin
+    doctest(AWSCRT)
     @testset "mqtt_test.jl" begin
         @info "Starting mqtt_test.jl"
         include("mqtt_test.jl")
