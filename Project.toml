@@ -11,9 +11,19 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LibAWSCRT = "df7458b6-5204-493f-a0e7-404b4eb72fac"
 
 [compat]
+AWSCRT_jll = "0.1"
 CEnum = "0.4"
 CountDownLatches = "2"
 ForeignCallbacks = "0.1"
 JSON = "0.21"
 LibAWSCRT = "0.1"
 julia = "1.9"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Aqua", "Documenter", "Random", "Test"]
