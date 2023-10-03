@@ -19,8 +19,9 @@ A collection of event-loops.
 An event-loop is a thread for doing async work, such as I/O.
 
 Arguments:
-- `num_threads (Union{Int,Nothing}) (default=nothing)`: Maximum number of event-loops to create. If unspecified, one is created for each processor on the machine.
-- `cpu_group (Union{Int,Nothing}) (default=nothing)`: Optional processor group to which all threads will be pinned. Useful for systems with non-uniform memory access (NUMA) nodes. If specified, the number of threads will be capped at the number of processors in the group.
+
+  - `num_threads (Union{Int,Nothing}) (default=nothing)`: Maximum number of event-loops to create. If unspecified, one is created for each processor on the machine.
+  - `cpu_group (Union{Int,Nothing}) (default=nothing)`: Optional processor group to which all threads will be pinned. Useful for systems with non-uniform memory access (NUMA) nodes. If specified, the number of threads will be capped at the number of processors in the group.
 """
 function EventLoopGroup(num_threads::Union{Int,Nothing} = nothing, cpu_group::Union{Int,Nothing} = nothing)
     if num_threads === nothing
@@ -78,8 +79,9 @@ end
 Default DNS host resolver.
 
 Arguments:
-- `el_group (EventLoopGroup)`: EventLoopGroup to use.
-- `max_hosts (Int) (default=16)`: Max host names to cache.
+
+  - `el_group (EventLoopGroup)`: EventLoopGroup to use.
+  - `max_hosts (Int) (default=16)`: Max host names to cache.
 """
 function HostResolver(el_group::EventLoopGroup, max_hosts::Int = 16)
     if max_hosts <= 0
@@ -127,8 +129,9 @@ end
 Handles creation and setup of client socket connections.
 
 Arguments:
-- `el_group (EventLoopGroup)`: EventLoopGroup to use.
-- `host_resolver (HostResolver)`: DNS host resolver to use.
+
+  - `el_group (EventLoopGroup)`: EventLoopGroup to use.
+  - `host_resolver (HostResolver)`: DNS host resolver to use.
 """
 function ClientBootstrap(el_group::EventLoopGroup, host_resolver::HostResolver)
     options = Ref(aws_client_bootstrap_options(el_group.ptr, host_resolver.ptr, C_NULL, C_NULL, C_NULL))
@@ -160,7 +163,7 @@ const extra_tls_kwargs_docs = """
 - `ca_dirpath (Union{String,Nothing}) (default=nothing)`: Path to directory containing trusted certificates, which will overrides the default trust store. Only supported on Unix.
 - `ca_filepath (Union{String,Nothing}) (default=nothing)`: Path to file containing PEM armored chain of trusted CA certificates.
 - `ca_data (Union{String,Nothing}) (default=nothing)`: PEM armored chain of trusted CA certificates.
-- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: If set, names to use in Application Layer Protocol Negotiation (ALPN). ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref). This can be customized per connection; see [`TLSConnectionOptions`](@ref).
+- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: If set, names to use in Application Layer Protocol Negotiation (ALPN). ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](https://octogonapus.github.io/LibAWSCRT.jl/dev/#LibAWSCRT.aws_tls_is_alpn_available-Tuple{}). This can be customized per connection; see [`TLSConnectionOptions`](@ref).
 """
 
 """
@@ -296,7 +299,8 @@ A context is expensive, but can be used for the lifetime of the application by a
 use the same TLS configuration.
 
 Arguments:
-- `options (TLSContextOptions)`: Configuration options.
+
+  - `options (TLSContextOptions)`: Configuration options.
 """
 function ClientTLSContext(options::TLSContextOptions)
     tls_ctx_opt = Ref(aws_tls_ctx_options(ntuple(_ -> UInt8(0), 200)))
@@ -388,9 +392,10 @@ Connection-specific TLS options.
 Note that while a TLS context is an expensive object, this object is cheap.
 
 Arguments:
-- `client_tls_context (ClientTLSContext)`: TLS context. A context can be shared by many connections.
-- `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: Connection-specific Application Layer Protocol Negotiation (ALPN) list. This overrides any ALPN list on the TLS context in the client this connection was made with. ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref).
-- `server_name (Union{String,Nothing}) (default=nothing)`: Name for TLS Server Name Indication (SNI). Also used for x.509 validation.
+
+  - `client_tls_context (ClientTLSContext)`: TLS context. A context can be shared by many connections.
+  - `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: Connection-specific Application Layer Protocol Negotiation (ALPN) list. This overrides any ALPN list on the TLS context in the client this connection was made with. ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](https://octogonapus.github.io/LibAWSCRT.jl/dev/#LibAWSCRT.aws_tls_is_alpn_available-Tuple%7B%7D).
+  - `server_name (Union{String,Nothing}) (default=nothing)`: Name for TLS Server Name Indication (SNI). Also used for x.509 validation.
 """
 function TLSConnectionOptions(
     client_tls_context::ClientTLSContext,
