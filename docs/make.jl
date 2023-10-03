@@ -1,24 +1,18 @@
 using AWSCRT
 using Documenter
 
-DocMeta.setdocmeta!(AWSCRT, :DocTestSetup, :(using AWSCRT); recursive=true)
+DocMeta.setdocmeta!(AWSCRT, :DocTestSetup, :(using AWSCRT); recursive = true)
 
 makedocs(;
-    modules=[AWSCRT],
-    authors="Octogonapus <firey45@gmail.com> and contributors",
-    repo="https://github.com/Octogonapus/AWSCRT.jl/blob/{commit}{path}#{line}",
-    sitename="AWSCRT.jl",
-    format=Documenter.HTML(;
-        prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://Octogonapus.github.io/AWSCRT.jl",
-        assets=String[],
+    modules = [AWSCRT],
+    repo = "https://github.com/Octogonapus/AWSCRT.jl/blob/{commit}{path}#{line}",
+    sitename = "AWSCRT.jl",
+    format = Documenter.HTML(;
+        prettyurls = get(ENV, "CI", "false") == "true",
+        canonical = "https://Octogonapus.github.io/AWSCRT.jl",
+        assets = String[],
     ),
-    pages=[
-        "Home" => "index.md",
-    ],
+    pages = ["Home" => "index.md"],
 )
 
-deploydocs(;
-    repo="github.com/Octogonapus/AWSCRT.jl",
-    devbranch="main",
-)
+deploydocs(; repo = "github.com/Octogonapus/AWSCRT.jl", devbranch = "main")

@@ -269,7 +269,7 @@ Arguments:
   - `username (Union{String,Nothing}) (default=nothing)`: Username to connect with.
   - `password (Union{String,Nothing}) (default=nothing)`: Password to connect with.
   - `socket_options (Ref(aws_socket_options}) (default=Ref(aws_socket_options(AWS_SOCKET_STREAM, AWS_SOCKET_IPV6, 5000, 0, 0, 0, false)))`: Optional socket options.
-  - `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: Connection-specific Application Layer Protocol Negotiation (ALPN) list. This overrides any ALPN list on the TLS context in the client this connection was made with. ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](@ref).
+  - `alpn_list (Union{Vector{String},Nothing}) (default=nothing)`: Connection-specific Application Layer Protocol Negotiation (ALPN) list. This overrides any ALPN list on the TLS context in the client this connection was made with. ALPN is not supported on all systems, see [`aws_tls_is_alpn_available`](https://octogonapus.github.io/LibAWSCRT.jl/dev/#LibAWSCRT.aws_tls_is_alpn_available-Tuple%7B%7D).
   - `use_websockets (Bool) (default=false)`: # TODO
   - `websocket_handshake_transform (nothing) (default=nothing)`: # TODO
   - `proxy_options (nothing) (default=nothing)`: # TODO
