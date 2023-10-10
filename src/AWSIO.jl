@@ -337,7 +337,7 @@ function ClientTLSContext(options::TLSContextOptions)
 
             if options.ca_data !== nothing
                 ca = Ref(aws_byte_cursor_from_c_str(options.ca_data))
-                if aws_tls_ctx_options_override_default_trust_store(tls_ctx_opt_ptr, ca) !== AWS_OP_SUCCESS
+                if aws_tls_ctx_options_override_default_trust_store(tls_ctx_opt_ptr, ca) != AWS_OP_SUCCESS
                     error("Failed to override trust store. $(aws_err_string())")
                 end
             end

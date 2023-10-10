@@ -25,8 +25,8 @@ sort_pairs(it) = sort(it; by = x -> x[begin])
 
 function new_tls_ctx()
     tls_ctx_options = create_client_with_mtls(
-        (@something get(ENV, "CERT_STRING", nothing) read(get(ENV, "CERT_PATH", nothing), String)),
-        (@something get(ENV, "PRI_KEY_STRING", nothing) read(get(ENV, "PRI_KEY_PATH", nothing), String)),
+        ENV["CERT_STRING"],
+        ENV["PRI_KEY_STRING"],
         ca_filepath = joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"),
     )
     return ClientTLSContext(tls_ctx_options)

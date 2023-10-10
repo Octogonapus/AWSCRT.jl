@@ -126,3 +126,22 @@
     task = disconnect(connection)
     @test fetch(task) === nothing
 end
+
+@testset "connect using CA string instead of a CA filepath" begin
+    client_id1 = random_client_id()
+
+    tls_ctx_options = create_client_with_mtls(
+        ENV["CERT_STRING"],
+        ENV["PRI_KEY_STRING"],
+        ca_data = read(joinpath(@__DIR__, "certs", "AmazonRootCA1.pem"), String),
+    )
+    tls_ctx = ClientTLSContext(tls_ctx_options)
+    client = MQTTClient(tls_ctx)
+    connection = MQTTConnection(client)
+
+    task = connect(connection, ENV["ENDPOINT"], 8883, client_id1)
+    @test fetch(task) == Dict(:session_present => false)
+
+    task = disconnect(connection)
+    @test fetch(task) === nothing
+end
