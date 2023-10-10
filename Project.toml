@@ -1,6 +1,6 @@
 name = "AWSCRT"
 uuid = "df31ea59-17a4-4ebd-9d69-4f45266dc2c7"
-version = "0.1.5"
+version = "0.1.6"
 
 [deps]
 AWSCRT_jll = "01db5350-6ea1-5d9a-9a47-8a31a394cb9c"
@@ -12,11 +12,11 @@ LibAWSCRT = "df7458b6-5204-493f-a0e7-404b4eb72fac"
 
 [compat]
 AWSCRT_jll = "0.1"
-CEnum = "0.4"
+CEnum = "0.5"
 CountDownLatches = "2"
 ForeignCallbacks = "0.1"
 JSON = "0.21"
-LibAWSCRT = "0.1"
+LibAWSCRT = "0.2"
 julia = "1.9"
 
 [extras]
