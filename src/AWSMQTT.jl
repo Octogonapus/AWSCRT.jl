@@ -100,6 +100,14 @@ Returns `nothing`.
 """
 const OnMessage = Function
 
+macro _con_preserve(connection, ref)
+    return quote
+        lock($(esc(connection)).connection_lifetime_refs_lock) do
+            push!($(esc(connection)).connection_lifetime_refs, $(esc(ref)))
+        end
+    end
+end
+
 """
     MQTTConnection(client::MQTTClient)
 
@@ -113,15 +121,23 @@ mutable struct MQTTConnection
     ptr::Ptr{aws_mqtt_client_connection}
     client::MQTTClient
     on_connection_complete_refs::Vector{Ref}
+
+    on_subscribe_complete_refs_lock::ReentrantLock
     on_subscribe_complete_refs::Dict{String,Vector{Ref}}
+
     on_resubscribe_complete_refs::Vector{Ref}
+
+    subscribe_refs_lock::ReentrantLock
     subscribe_refs::Dict{String,Vector{Ref}}
+
+    on_message_refs_lock::ReentrantLock
     on_message_refs::Vector{Ref}
-    disconnect_refs::Vector{Ref}
-    on_unsubscribe_complete_refs::Dict{String,Vector{Ref}}
+
+    on_publish_complete_refs_lock::ReentrantLock
     on_publish_complete_refs::Dict{String,Vector{Ref}}
-    on_connection_interrupted_refs::Vector{Ref}
-    on_connection_resumed_refs::Vector{Ref}
+
+    connection_lifetime_refs_lock::ReentrantLock
+    connection_lifetime_refs::Vector{Ref} # refs that must be live until this connection object is dead
 
     function MQTTConnection(client::MQTTClient)
         ptr = aws_mqtt_client_connection_new(client.ptr)
@@ -133,14 +149,16 @@ mutable struct MQTTConnection
             ptr,
             client,
             Ref[],
+            ReentrantLock(),
             Dict{String,Vector{Ref}}(),
             Ref[],
+            ReentrantLock(),
             Dict{String,Vector{Ref}}(),
+            ReentrantLock(),
             Ref[],
-            Ref[],
+            ReentrantLock(),
             Dict{String,Vector{Ref}}(),
-            Dict{String,Vector{Ref}}(),
-            Ref[],
+            ReentrantLock(),
             Ref[],
         )
         return finalizer(out) do x
@@ -178,50 +196,57 @@ struct Will
     retain::Bool
 end
 
-struct OnConnectionInterruptedMsg
-    error_code::Cint
+mutable struct _OnConnectionInterruptedUserData # mutable so it has a stable address
+    connection::MQTTConnection
+    callback::OnConnectionInterrupted
 end
 
-function on_connection_interrupted(connection::Ptr{aws_mqtt_client_connection}, error_code::Cint, userdata::Ptr{Cvoid})
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-    ForeignCallbacks.notify!(token, OnConnectionInterruptedMsg(error_code))
+function _c_on_connection_interrupted(
+    connection::Ptr{aws_mqtt_client_connection},
+    error_code::Cint,
+    userdata::Ptr{Cvoid},
+)
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnConnectionResumedUserData}
+    data[].callback(data[].connection, error_code)
     return nothing
 end
 
-struct OnConnectionResumedMsg
-    return_code::Cint
-    session_present::Cint
+mutable struct _OnConnectionResumedUserData # mutable so it has a stable address
+    connection::MQTTConnection
+    callback::OnConnectionResumed
 end
 
-function on_connection_resumed(
+function _c_on_connection_resumed(
     connection::Ptr{aws_mqtt_client_connection},
     return_code::Cint,
     session_present::Cint,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-    ForeignCallbacks.notify!(token, OnConnectionResumedMsg(return_code, session_present))
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnConnectionResumedUserData}
+    data[].callback(data[].connection, aws_mqtt_connect_return_code(return_code), session_present != 0)
     return nothing
 end
 
-struct OnConnectionCompleteMsg
-    error_code::Cint
-    return_code::Cint
-    session_present::Cuchar
+mutable struct _OnConnectionCompleteUserData # mutable so it has a stable address
+    ch::Channel{Any}
 end
 
-function on_connection_complete(
+function _c_on_connection_complete(
     connection::Ptr{aws_mqtt_client_connection},
     error_code::Cint,
     return_code::Cint,
     session_present::Cuchar,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-    ForeignCallbacks.notify!(token, OnConnectionCompleteMsg(error_code, return_code, session_present))
+    result = if return_code != AWS_MQTT_CONNECT_ACCEPTED
+        ErrorException("Connection failed. $(aws_err_string(return_code))")
+    elseif error_code != AWS_ERROR_SUCCESS
+        ErrorException("Connection failed. $(aws_err_string(error_code))")
+    else
+        Dict(:session_present => session_present != 0)
+    end
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnConnectionCompleteUserData}
+    put!(data[].ch, result)
     return nothing
 end
 
@@ -316,45 +341,30 @@ function connect(
         )
     end
 
-    on_connection_interrupted_cb, on_connection_interrupted_token = if on_connection_interrupted !== nothing
-        on_connection_interrupted_fcb = ForeignCallbacks.ForeignCallback{OnConnectionInterruptedMsg}() do msg
-            on_connection_interrupted(connection, msg.error_code)
-        end
-        on_connection_interrupted_token = Ref(ForeignCallbacks.ForeignToken(on_connection_interrupted_fcb))
-        on_connection_interrupted_cb =
-            @cfunction(on_connection_interrupted, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Ptr{Cvoid}))
-
-        # The lifetime of the on_connection_interrupted FCB and its token is the same as the lifetime of the connection
-        connection.on_connection_interrupted_refs =
-            [Ref(on_connection_interrupted_fcb), on_connection_interrupted_token]
-
-        on_connection_interrupted_cb, on_connection_interrupted_token
+    on_connection_interrupted_user_data = if on_connection_interrupted !== nothing
+        ud = Ref(_OnConnectionInterruptedUserData(connection, on_connection_interrupted))
+        # The user data must be live until the connection is dead because the callback can run and use it
+        @_con_preserve connection ud
+        ud
     else
-        C_NULL, C_NULL
+        C_NULL
     end
 
-    on_connection_resumed_cb, on_connection_resumed_token = if on_connection_resumed !== nothing
-        on_connection_resumed_fcb = ForeignCallbacks.ForeignCallback{OnConnectionResumedMsg}() do msg
-            on_connection_resumed(connection, aws_mqtt_connect_return_code(msg.return_code), msg.session_present != 0)
-        end
-        on_connection_resumed_token = Ref(ForeignCallbacks.ForeignToken(on_connection_resumed_fcb))
-        on_connection_resumed_cb =
-            @cfunction(on_connection_resumed, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Ptr{Cvoid}))
-
-        # The lifetime of the on_connection_resumed FCB and its token is the same as the lifetime of the connection
-        connection.on_connection_resumed_refs = [Ref(on_connection_resumed_fcb), on_connection_resumed_token]
-
-        on_connection_resumed_cb, on_connection_resumed_token
+    on_connection_resumed_user_data = if on_connection_resumed !== nothing
+        ud = Ref(_OnConnectionResumedUserData(connection, on_connection_resumed))
+        # The user data must be live until the connection is dead because the callback can run and use it
+        @_con_preserve connection ud
+        ud
     else
-        C_NULL, C_NULL
+        C_NULL
     end
 
     aws_mqtt_client_connection_set_connection_interruption_handlers(
         connection.ptr,
-        on_connection_interrupted_cb,
-        Base.unsafe_convert(Ptr{Cvoid}, on_connection_interrupted_token),
-        on_connection_resumed_cb,
-        Base.unsafe_convert(Ptr{Cvoid}, on_connection_resumed_token),
+        on_connection_interrupted === nothing ? C_NULL : _C_ON_CONNECTION_INTERRUPTED[],
+        on_connection_interrupted === nothing ? C_NULL : Base.pointer_from_objref(on_connection_interrupted_user_data),
+        on_connection_resumed === nothing ? C_NULL : _C_ON_CONNECTION_RESUMED[],
+        on_connection_resumed === nothing ? C_NULL : Base.pointer_from_objref(on_connection_resumed_user_data),
     )
 
     # TODO aws_mqtt_client_connection_use_websockets
@@ -400,26 +410,12 @@ function connect(
         server_name_cur = Ref(aws_byte_cursor_from_c_str(server_name))
         client_id_cur = Ref(aws_byte_cursor_from_c_str(client_id))
 
-        ch = Channel(1)
-        on_connection_complete_fcb = ForeignCallbacks.ForeignCallback{OnConnectionCompleteMsg}() do msg
-            result = if msg.return_code != AWS_MQTT_CONNECT_ACCEPTED
-                ErrorException("Connection failed. $(aws_err_string(msg.return_code))")
-            elseif msg.error_code != AWS_ERROR_SUCCESS
-                ErrorException("Connection failed. $(aws_err_string(msg.error_code))")
-            else
-                Dict(:session_present => msg.session_present != 0)
-            end
-            put!(ch, result)
-        end
-        on_connection_complete_token = Ref(ForeignCallbacks.ForeignToken(on_connection_complete_fcb))
+        out_ch = Channel(1)
+        on_connection_complete_user_data = Ref(_OnConnectionCompleteUserData(out_ch))
+        # The user data must be live until the connection is dead because the callback can run and use it
+        @_con_preserve connection on_connection_complete_user_data
 
-        on_connection_complete_cb =
-            @cfunction(on_connection_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Cuchar, Ptr{Cvoid}))
-
-        # The lifetime of the on_connection_complete FCB and its token is the same as the lifetime of the connection
-        connection.on_connection_complete_refs = [Ref(on_connection_complete_fcb), on_connection_complete_token]
-
-        GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur on_connection_complete_fcb on_connection_complete_token begin
+        GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur out_ch begin
             conn_options = Ref(
                 aws_mqtt_connection_options(
                     server_name_cur[],
@@ -431,8 +427,8 @@ function connect(
                     keep_alive_secs,
                     ping_timeout_ms,
                     protocol_operation_timeout_ms,
-                    on_connection_complete_cb,
-                    Base.unsafe_convert(Ptr{Cvoid}, on_connection_complete_token), # user_data for on_connection_complete
+                    _C_ON_CONNECTION_COMPLETE[],
+                    Base.pointer_from_objref(on_connection_complete_user_data),
                     clean_session,
                 ),
             )
@@ -441,9 +437,9 @@ function connect(
                 error("Failed to connect. $(aws_err_string())")
             end
 
-            return @async begin
-                GC.@preserve connection conn_options on_connection_complete_fcb on_connection_complete_token begin
-                    result = take!(ch)
+            return Threads.@spawn begin
+                GC.@preserve connection conn_options begin
+                    result = take!(out_ch)
                     if result isa Exception
                         throw(result)
                     else
@@ -457,10 +453,13 @@ function connect(
     end
 end
 
-function on_disconnect_complete(connection::Ptr{aws_mqtt_client_connection}, userdata::Ptr{Cvoid})
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-    ForeignCallbacks.notify!(token, nothing)
+mutable struct _OnDisconnectCompleteUserData # mutable so it has a stable address
+    latch::CountDownLatch
+end
+
+function _c_on_disconnect_complete(connection::Ptr{aws_mqtt_client_connection}, userdata::Ptr{Cvoid})
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnDisconnectCompleteUserData}
+    count_down(data[].latch)
     return nothing
 end
 
@@ -474,19 +473,17 @@ The task will contain nothing.
 """
 function disconnect(connection::MQTTConnection)
     latch = CountDownLatch(1)
-    on_disconnect_complete_fcb = ForeignCallbacks.ForeignCallback{Nothing}() do _
-        count_down(latch)
-    end
-    on_disconnect_complete_token = Ref(ForeignCallbacks.ForeignToken(on_disconnect_complete_fcb))
-    on_disconnect_complete_cb = @cfunction(on_disconnect_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Ptr{Cvoid}))
+    userdata = Ref(_OnDisconnectCompleteUserData(latch))
+    @_con_preserve connection userdata
 
-    # The liftime of the on_disconnect FCB and its token is the same as the lifetime of the connection
-    connection.disconnect_refs = [Ref(on_disconnect_complete_fcb), on_disconnect_complete_token]
-
-    GC.@preserve connection on_disconnect_complete_fcb on_disconnect_complete_token begin
-        aws_mqtt_client_connection_disconnect(connection.ptr, on_disconnect_complete_cb, on_disconnect_complete_token)
+    GC.@preserve connection begin
+        aws_mqtt_client_connection_disconnect(
+            connection.ptr,
+            _C_ON_DISCONNECT_COMPLETE[],
+            Base.pointer_from_objref(userdata),
+        )
         return @async begin
-            GC.@preserve connection on_disconnect_complete_fcb on_disconnect_complete_token begin
+            GC.@preserve connection begin
                 await(latch)
                 return nothing
             end
@@ -494,17 +491,11 @@ function disconnect(connection::MQTTConnection)
     end
 end
 
-struct OnMessageMsg
-    topic_copy::Ptr{Cuchar}
-    topic_len::Csize_t
-    payload_copy::Ptr{Cuchar}
-    payload_len::Csize_t
-    dup::Cuchar
-    qos::Cint
-    retain::Cuchar
+mutable struct _OnMessageUserData # mutable so it has a stable address
+    callback::OnMessage
 end
 
-function on_message(
+function _c_on_message(
     connection::Ptr{aws_mqtt_client_connection},
     topic::Ptr{aws_byte_cursor},
     payload::Ptr{aws_byte_cursor},
@@ -513,43 +504,32 @@ function on_message(
     retain::Cuchar,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-
-    # Make a copy because we only have topic inside this function, not inside the ForeignCallback
+    # Make a copy because topic is freed when this function returns
     topic_obj = Base.unsafe_load(topic)
     topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), topic_obj.len, 1)
     ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), topic_copy, topic_obj.ptr, topic_obj.len)
 
-    # Make a copy because we only have payload inside this function, not inside the ForeignCallback
+    # Make a copy because payload is freed when this function returns
     payload_obj = Base.unsafe_load(payload)
     payload_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), payload_obj.len, 1)
     ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), payload_copy, payload_obj.ptr, payload_obj.len)
 
-    ForeignCallbacks.notify!(
-        token,
-        OnMessageMsg(
-            Base.unsafe_convert(Ptr{Cuchar}, topic_copy),
-            topic_obj.len,
-            Base.unsafe_convert(Ptr{Cuchar}, payload_copy),
-            payload_obj.len,
-            dup,
-            qos,
-            retain,
-        ),
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnMessageUserData}
+    data[].callback(
+        String(Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Cuchar}, topic_copy), topic_obj.len, own = true)),
+        String(Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Cuchar}, payload_copy), payload_obj.len, own = true)),
+        dup != 0,
+        aws_mqtt_qos(qos),
+        retain != 0,
     )
     return nothing
 end
 
-struct OnSubcribeCompleteMsg
-    packet_id::Cuint
-    topic_copy::Ptr{Cuchar}
-    topic_len::Csize_t
-    qos::Cint
-    error_code::Cint
+mutable struct _OnSubcribeCompleteUserData # mutable so it has a stable address
+    ch::Channel{Any}
 end
 
-function on_subscribe_complete(
+function _c_on_subscribe_complete(
     connection::Ptr{aws_mqtt_client_connection},
     packet_id::Cuint,
     topic::Ptr{aws_byte_cursor},
@@ -557,18 +537,25 @@ function on_subscribe_complete(
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-
-    # Make a copy because we only have topic inside this function, not inside the ForeignCallback
+    # Make a copy because topic is freed when this function returns
     topic_obj = Base.unsafe_load(topic)
     topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), topic_obj.len, 1)
     ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), topic_copy, topic_obj.ptr, topic_obj.len)
 
-    ForeignCallbacks.notify!(
-        token,
-        OnSubcribeCompleteMsg(packet_id, Base.unsafe_convert(Ptr{Cuchar}, topic_copy), topic_obj.len, qos, error_code),
-    )
+    result = if error_code != AWS_ERROR_SUCCESS
+        ErrorException("Subscribe failed. $(aws_err_string(error_code))")
+    else
+        Dict(
+            :packet_id => UInt(packet_id),
+            :topic => String(
+                Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Cuchar}, topic_copy), topic_obj.len, own = true),
+            ),
+            :qos => aws_mqtt_qos(qos),
+        )
+    end
+
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnSubcribeCompleteUserData}
+    put!(data[].ch, result)
     return nothing
 end
 
@@ -591,73 +578,62 @@ Arguments:
 $subscribe_return_docs
 """
 function subscribe(connection::MQTTConnection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
-    on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
-        callback(
-            String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
-            String(Base.unsafe_wrap(Array, msg.payload_copy, msg.payload_len, own = true)),
-            msg.dup != 0,
-            aws_mqtt_qos(msg.qos),
-            msg.retain != 0,
-        )
-    end
-    on_message_token = Ref(ForeignCallbacks.ForeignToken(on_message_fcb))
-    on_message_cb = @cfunction(
-        on_message,
-        Cvoid,
-        (Ptr{aws_mqtt_client_connection}, Ptr{aws_byte_cursor}, Ptr{aws_byte_cursor}, Cuchar, Cint, Cuchar, Ptr{Cvoid})
-    )
-
-    # The lifetime of the on_message FCB and its token is the same as the lifetime of the subscription.
-    connection.subscribe_refs[topic] = [Ref(on_message_fcb), on_message_token]
-
-    ch = Channel(1)
-    on_subscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnSubcribeCompleteMsg}() do msg
-        result = if msg.error_code != AWS_ERROR_SUCCESS
-            ErrorException("Subscribe failed. $(aws_err_string(msg.error_code))")
+    on_message_user_data = Ref(_OnMessageUserData(callback))
+    # The user data must be live until the subscription for this topic is gone.
+    # Also we can't clear the old refs, if any, until we set the new user data.
+    lock(connection.subscribe_refs_lock) do
+        if haskey(connection.subscribe_refs, topic)
+            push!(connection.subscribe_refs[topic], on_message_user_data)
         else
-            Dict(
-                :packet_id => UInt(msg.packet_id),
-                :topic => String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
-                :qos => aws_mqtt_qos(msg.qos),
-            )
+            connection.subscribe_refs[topic] = [on_message_user_data]
         end
-        put!(ch, result)
     end
-    on_subscribe_complete_token = Ref(ForeignCallbacks.ForeignToken(on_subscribe_complete_fcb))
-    on_subscribe_complete_cb = @cfunction(
-        on_subscribe_complete,
-        Cvoid,
-        (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_byte_cursor}, Cint, Cint, Ptr{Cvoid})
-    )
 
+    out_ch = Channel(1)
+    on_subscribe_complete_user_data = Ref(_OnSubcribeCompleteUserData(out_ch))
     # The lifetime of the on_subscribe_complete FCB and its token is from SUBSCRIBE to SUBACK so we can preserve it
     # until the task returned from this function has finished, as it finishes when a SUBACK is received.
     # We also preserve it on the connection in case we get a stray SUBACK.
-    connection.on_subscribe_complete_refs[topic] = [Ref(on_subscribe_complete_fcb), on_subscribe_complete_token]
+    # Also we can't clear the old refs, if any, until we set the new user data.
+    lock(connection.on_subscribe_complete_refs_lock) do
+        if haskey(connection.on_subscribe_complete_refs, topic)
+            push!(connection.on_subscribe_complete_refs[topic], on_subscribe_complete_user_data)
+        else
+            connection.on_subscribe_complete_refs[topic] = [on_subscribe_complete_user_data]
+        end
+    end
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
-    GC.@preserve connection topic_cur on_subscribe_complete_fcb on_subscribe_complete_token on_message_fcb on_message_token begin
+    GC.@preserve connection topic_cur out_ch begin
         packet_id = aws_mqtt_client_connection_subscribe(
             connection.ptr,
             topic_cur,
             qos,
-            on_message_cb,
-            Base.unsafe_convert(Ptr{Cvoid}, on_message_token),
+            _C_ON_MESSAGE[],
+            Base.pointer_from_objref(on_message_user_data),
             C_NULL, # called when a subscription is removed
-            on_subscribe_complete_cb,
-            Base.unsafe_convert(Ptr{Cvoid}, on_subscribe_complete_token),
+            _C_ON_SUBSCRIBE_COMPLETE[],
+            Base.pointer_from_objref(on_subscribe_complete_user_data),
         )
+
+        # Now that we set the new user data we can remove the ref to the old user data, if there was any
+        lock(connection.subscribe_refs_lock) do
+            connection.subscribe_refs[topic] = [on_message_user_data]
+        end
+        lock(connection.on_subscribe_complete_refs_lock) do
+            connection.on_subscribe_complete_refs[topic] = [on_subscribe_complete_user_data]
+        end
+
         return (@async begin
-            GC.@preserve connection topic_cur on_subscribe_complete_fcb on_subscribe_complete_token on_message_fcb on_message_token begin
-                result = take!(ch)
+            GC.@preserve connection topic_cur begin
+                result = take!(out_ch)
                 if result isa Exception
                     throw(result)
                 else
                     return result
                 end
             end
-        end),
-        packet_id
+        end), packet_id
     end
 end
 
@@ -682,66 +658,54 @@ function on_message(connection::MQTTConnection, callback::Union{OnMessage,Nothin
         end
 
         # Clear any refs from a prior callback so they can be GC'd
-        connection.on_message_refs = []
+        lock(connection.on_message_refs_lock) do
+            connection.on_message_refs = []
+        end
 
         return nothing
     else
-        on_message_fcb = ForeignCallbacks.ForeignCallback{OnMessageMsg}() do msg
-            callback(
-                String(Base.unsafe_wrap(Array, msg.topic_copy, msg.topic_len, own = true)),
-                String(Base.unsafe_wrap(Array, msg.payload_copy, msg.payload_len, own = true)),
-                msg.dup != 0,
-                aws_mqtt_qos(msg.qos),
-                msg.retain != 0,
-            )
+        userdata = Ref(_OnMessageUserData(callback))
+        # We can't clear the old refs, if any, until we set the new user data.
+        lock(connection.on_message_refs_lock) do
+            push!(connection.on_message_refs, userdata)
         end
-        on_message_token = Ref(ForeignCallbacks.ForeignToken(on_message_fcb))
 
-        # The lifetime of this on_message FCB and its token is the same as the lifetime of the connection
-        connection.on_message_refs = [Ref(on_message_fcb), on_message_token]
-
-        on_message_cb = @cfunction(
-            on_message,
-            Cvoid,
-            (
-                Ptr{aws_mqtt_client_connection},
-                Ptr{aws_byte_cursor},
-                Ptr{aws_byte_cursor},
-                Cuchar,
-                Cint,
-                Cuchar,
-                Ptr{Cvoid},
-            )
-        )
-
-        GC.@preserve on_message_fcb on_message_token begin
-            if aws_mqtt_client_connection_set_on_any_publish_handler(
-                connection.ptr,
-                on_message_cb,
-                Base.unsafe_convert(Ptr{Cvoid}, on_message_token),
-            ) != AWS_OP_SUCCESS
-                error("$_on_message_error $(aws_err_string())")
-            end
-            return nothing
+        if aws_mqtt_client_connection_set_on_any_publish_handler(
+            connection.ptr,
+            _C_ON_MESSAGE[],
+            Base.pointer_from_objref(userdata),
+        ) != AWS_OP_SUCCESS
+            error("$_on_message_error $(aws_err_string())")
         end
+
+        # Now that we set the new user data we can remove the ref to the old user data, if there was any
+        lock(connection.on_message_refs_lock) do
+            connection.on_message_refs = [userdata]
+        end
+
+        return nothing
     end
 end
 
-struct OnUnsubscribeCompleteMsg
-    packet_id::Cuint
-    error_code::Cint
+mutable struct OnUnsubscribeCompleteUserData # mutable so it has a stable address
+    ch::Channel{Any}
 end
 
-function on_unsubscribe_complete(
+function _c_on_unsubscribe_complete(
     connection::Ptr{aws_mqtt_client_connection},
     packet_id::Cuint,
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
+    result = if error_code != AWS_ERROR_SUCCESS
+        ErrorException("Unsubscribe failed. $(aws_err_string(error_code))")
+    else
+        Dict(:packet_id => UInt(packet_id))
+    end
 
-    ForeignCallbacks.notify!(token, OnUnsubscribeCompleteMsg(packet_id, error_code))
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{OnUnsubscribeCompleteUserData}
+    put!(data[].ch, result)
+
     return nothing
 end
 
@@ -768,36 +732,25 @@ Arguments:
 $unsubscribe_return_docs
 """
 function unsubscribe(connection::MQTTConnection, topic::String)
-    ch = Channel(1)
-    on_unsubscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnUnsubscribeCompleteMsg}() do msg
-        result = if msg.error_code != AWS_ERROR_SUCCESS
-            ErrorException("Unsubscribe failed. $(aws_err_string(msg.error_code))")
-        else
-            Dict(:packet_id => UInt(msg.packet_id))
-        end
-        put!(ch, result)
-    end
-    on_unsubscribe_complete_token = Ref(ForeignCallbacks.ForeignToken(on_unsubscribe_complete_fcb))
-    on_unsubscribe_complete_cb =
-        @cfunction(on_unsubscribe_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
-
+    out_ch = Channel(1)
+    userdata = Ref(OnUnsubscribeCompleteUserData(out_ch))
     # It's not documented, but it seems like the lifetime of the on_unsubscribe_complete FCB and its token is
     # from UNSUBSCRIBE to UNSUBACK so we can preserve it until the task returned from this function has finished,
     # as it finishes when an UNSUBACK is received.
-    # We also preserve it on the connection in case we get a stray UNSUBACK.
-    connection.on_unsubscribe_complete_refs[topic] = [Ref(on_unsubscribe_complete_fcb), on_unsubscribe_complete_token]
+    # That said, I am also scared about a stray UNSUBACK so I will preserve it for the connection lifetime to be safe.
+    @_con_preserve connection userdata
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
-    GC.@preserve connection topic_cur on_unsubscribe_complete_fcb on_unsubscribe_complete_token begin
+    GC.@preserve connection topic_cur out_ch begin
         packet_id = aws_mqtt_client_connection_unsubscribe(
             connection.ptr,
             topic_cur,
-            on_unsubscribe_complete_cb,
-            Base.unsafe_convert(Ptr{Cvoid}, on_unsubscribe_complete_token),
+            _C_ON_UNSUBSCRIBE_COMPLETE[],
+            Base.pointer_from_objref(userdata),
         )
         return (@async begin
-            GC.@preserve connection topic_cur on_unsubscribe_complete_fcb on_unsubscribe_complete_token begin
-                result = take!(ch)
+            GC.@preserve connection topic_cur begin
+                result = take!(out_ch)
                 if result isa Exception
                     throw(result)
                 else
@@ -807,42 +760,31 @@ function unsubscribe(connection::MQTTConnection, topic::String)
                     return result
                 end
             end
-        end),
-        packet_id
+        end), packet_id
     end
 end
 
-struct OnResubcribeCompleteUD
-    token::Ptr{ForeignCallbacks.ForeignToken}
+mutable struct _OnResubcribeCompleteUD # mutable so it has a stable address
+    ch::Channel{Any}
     aws_array_list_length_ptr::Ptr{Cvoid}
     aws_array_list_get_at_ptr::Ptr{Cvoid}
 end
 
-struct OnResubcribeCompleteMsg
-    packet_id::Cuint
-    topics::Ptr{Ptr{UInt8}}
-    qoss::Ptr{aws_mqtt_qos}
-    len::Csize_t
-    error_code::Cint
-end
-
-function on_resubscribe_complete(
+function _c_on_resubscribe_complete(
     connection::Ptr{aws_mqtt_client_connection},
     packet_id::Cuint,
     topic_subacks::Ptr{aws_array_list},
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    ud = Base.unsafe_load(Base.unsafe_convert(Ptr{OnResubcribeCompleteUD}, userdata))
-    token = Base.unsafe_load(ud.token)
+    ud = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnResubcribeCompleteUD}
 
     # topic_subacks is an array list with eltype (struct aws_mqtt_topic_subscription *)
     # We are lent topic_subacks only inside this function. It will be freed as soon as this function returns.
     # Therefore we need to copy it. This list also contains byte cursors, which will also be freed, so we need to
     # deeply copy the topic strings.
 
-    num_topics = ccall(ud.aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
+    num_topics = ccall(ud[].aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
 
     # alloc space to hold the eltype of the list (struct aws_mqtt_topic_subscription *)
     sub_i_ptr = Libc.malloc(sizeof(Ptr{Cvoid}))
@@ -859,7 +801,7 @@ function on_resubscribe_complete(
     for i = 1:num_topics
         # call aws_array_list_get_at to load an element into *sub_i_ptr
         ccall(
-            ud.aws_array_list_get_at_ptr,
+            ud[].aws_array_list_get_at_ptr,
             Cint,
             (Ptr{aws_array_list}, Ptr{Cvoid}, Csize_t),
             topic_subacks,
@@ -890,7 +832,37 @@ function on_resubscribe_complete(
     end
     Libc.free(sub_i_ptr)
 
-    ForeignCallbacks.notify!(token, OnResubcribeCompleteMsg(packet_id, topics, qoss, num_topics, error_code))
+    result = if error_code != AWS_ERROR_SUCCESS
+        ErrorException("Resubscribe failed. $(aws_err_string(error_code))")
+    else
+        topics_and_qoss = []
+
+        tptr = Base.unsafe_convert(Ptr{Ptr{UInt8}}, topics)
+        qptr = Base.unsafe_convert(Ptr{aws_mqtt_qos}, qoss)
+        try
+            for i = 1:num_topics
+                try
+                    # make a copy of the topic before we free it
+                    topic = Base.unsafe_string(Base.unsafe_load(tptr, i))
+                    # also make ac opy of the qos (which is just an int)
+                    qos = Base.unsafe_load(qptr, i)
+                    push!(topics_and_qoss, (topic, qos))
+                finally
+                    Libc.free(Base.unsafe_load(tptr, i))
+                end
+            end
+        finally
+            tptr = nothing
+            qptr = nothing
+            Libc.free(topics)
+            Libc.free(qoss)
+        end
+
+        Dict(:packet_id => UInt(packet_id), :topics => topics_and_qoss)
+    end
+
+    put!(ud[].ch, result)
+
     return nothing
 end
 
@@ -911,67 +883,25 @@ If successful, the task will contain a dict with the following members:
 If unsuccessful, the task contains an exception.
 """
 function resubscribe_existing_topics(connection::MQTTConnection)
-    ch = Channel(1)
-    on_resubscribe_complete_fcb = ForeignCallbacks.ForeignCallback{OnResubcribeCompleteMsg}() do msg
-        result = if msg.error_code != AWS_ERROR_SUCCESS
-            ErrorException("Resubscribe failed. $(aws_err_string(msg.error_code))")
-        else
-            topics_and_qoss = []
-
-            GC.@preserve msg begin
-                tptr = Base.unsafe_convert(Ptr{Ptr{UInt8}}, msg.topics)
-                qptr = Base.unsafe_convert(Ptr{aws_mqtt_qos}, msg.qoss)
-                try
-                    for i = 1:msg.len
-                        try
-                            # make a copy of the topic before we free it
-                            topic = Base.unsafe_string(Base.unsafe_load(tptr, i))
-                            # also make ac opy of the qos (which is just an int)
-                            qos = Base.unsafe_load(qptr, i)
-                            push!(topics_and_qoss, (topic, qos))
-                        finally
-                            Libc.free(Base.unsafe_load(tptr, i))
-                        end
-                    end
-                finally
-                    tptr = nothing
-                    qptr = nothing
-                    Libc.free(msg.topics)
-                    Libc.free(msg.qoss)
-                end
-            end
-
-            Dict(:packet_id => UInt(msg.packet_id), :topics => topics_and_qoss)
-        end
-        put!(ch, result)
-    end
-    on_resubscribe_complete_token = Ref(ForeignCallbacks.ForeignToken(on_resubscribe_complete_fcb))
-    on_resubscribe_complete_cb = @cfunction(
-        on_resubscribe_complete,
-        Cvoid,
-        (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_array_list}, Cint, Ptr{Cvoid})
-    )
-
-    # The lifetime of the on_resubscribe_complete FCB and its token is the same as the liftime of the connection
+    out_ch = Channel(1)
     udata = Ref(
-        OnResubcribeCompleteUD(
-            Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, on_resubscribe_complete_token),
+        _OnResubcribeCompleteUD(
+            out_ch,
             Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_length),
             Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_get_at),
         ),
     )
+    @_con_preserve connection udata
 
-    connection.on_resubscribe_complete_refs = [Ref(on_resubscribe_complete_fcb), on_resubscribe_complete_token, udata]
-
-    GC.@preserve connection on_resubscribe_complete_fcb on_resubscribe_complete_token udata begin
+    GC.@preserve connection out_ch begin
         packet_id = aws_mqtt_resubscribe_existing_topics(
             connection.ptr,
-            on_resubscribe_complete_cb,
-            Base.unsafe_convert(Ptr{Cvoid}, udata),
+            _C_ON_RESUBSCRIBE_COMPLETE[],
+            Base.pointer_from_objref(udata),
         )
         return (@async begin
-            GC.@preserve connection on_resubscribe_complete_fcb on_resubscribe_complete_token udata begin
-                result = take!(ch)
+            GC.@preserve connection begin
+                result = take!(out_ch)
                 if result isa Exception
                     throw(result)
                 else
@@ -982,21 +912,23 @@ function resubscribe_existing_topics(connection::MQTTConnection)
     end
 end
 
-struct OnPublishCompleteMsg
-    packet_id::Cuint
-    error_code::Cint
+mutable struct _OnPublishCompleteUD # mutable so it has a stable address
+    ch::Channel{Any}
 end
 
-function on_publish_complete(
+function _c_on_publish_complete(
     connection::Ptr{aws_mqtt_client_connection},
     packet_id::Cuint,
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
-    # This is a native function and may not interact with the Julia runtime
-    token = Base.unsafe_load(Base.unsafe_convert(Ptr{ForeignCallbacks.ForeignToken}, userdata))
-
-    ForeignCallbacks.notify!(token, OnPublishCompleteMsg(packet_id, error_code))
+    result = if error_code != AWS_ERROR_SUCCESS
+        ErrorException("Publish failed. $(aws_err_string(error_code))")
+    else
+        Dict(:packet_id => UInt(packet_id))
+    end
+    ud = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnPublishCompleteUD}
+    put!(ud[].ch, result)
     return nothing
 end
 
@@ -1030,47 +962,51 @@ Arguments:
 $publish_return_docs
 """
 function publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
-    ch = Channel(1)
-    on_publish_complete_fcb = ForeignCallbacks.ForeignCallback{OnPublishCompleteMsg}() do msg
-        result = if msg.error_code != AWS_ERROR_SUCCESS
-            ErrorException("Publish failed. $(aws_err_string(msg.error_code))")
-        else
-            Dict(:packet_id => UInt(msg.packet_id))
-        end
-        put!(ch, result)
-    end
-    on_publish_complete_token = Ref(ForeignCallbacks.ForeignToken(on_publish_complete_fcb))
-    on_publish_complete_cb =
-        @cfunction(on_publish_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+    out_ch = Channel(1)
+    userdata = Ref(_OnPublishCompleteUD(out_ch))
 
     # It's not documented, but it seems like the lifetime of the on_publish_complete FCB and its token is
     # from PUBLISH to either packet send, PUBACK, or PUBCOMP depending on QoS level, so we can preserve it until
     # the task returned from this function has finished, as it finishes when the correct event is received.
     # We also preserve it on the connection in case we get a stray PUBACK or PUBCOMP, depending on QoS level.
-    connection.on_publish_complete_refs[topic] = [Ref(on_publish_complete_fcb), on_publish_complete_token]
+    # Also we can't clear the old refs, if any, until we set the new user data.
+    lock(connection.on_publish_complete_refs_lock) do
+        if haskey(connection.on_publish_complete_refs, topic)
+            push!(connection.on_publish_complete_refs[topic], userdata)
+        else
+            connection.on_publish_complete_refs[topic] = [userdata]
+        end
+    end
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
     payload_cur = Ref(aws_byte_cursor_from_c_str(payload))
-    GC.@preserve connection topic_cur payload_cur on_publish_complete_fcb on_publish_complete_token begin
+    GC.@preserve connection topic_cur payload_cur out_ch begin
         packet_id = aws_mqtt_client_connection_publish(
             connection.ptr,
             topic_cur,
             qos,
             retain,
             payload_cur,
-            on_publish_complete_cb,
-            Base.unsafe_convert(Ptr{Cvoid}, on_publish_complete_token),
+            _C_ON_PUBLISH_COMPLETE[],
+            Base.pointer_from_objref(userdata),
         )
+        @debug "publish" packet_id topic payload qos retain
+
+        # Now that we set the new user data we can remove the ref to the old user data, if there was any
+        lock(connection.on_publish_complete_refs_lock) do
+            connection.on_publish_complete_refs[topic] = [userdata]
+        end
+
         return (@async begin
-            GC.@preserve connection topic_cur payload_cur on_publish_complete_fcb on_publish_complete_token begin
-                result = take!(ch)
+            GC.@preserve connection topic_cur payload_cur begin
+                result = take!(out_ch)
+                @debug "publish finished" packet_id result
                 if result isa Exception
                     throw(result)
                 else
                     return result
                 end
             end
-        end),
-        packet_id
+        end), packet_id
     end
 end

@@ -14,72 +14,33 @@ using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum, JSON
 import Base: lock, unlock
 export lock, unlock
 
-const _AWSCRT_ALLOCATOR = Ref{Union{Ptr{aws_allocator},Nothing}}(nothing)
-const _GLOBAL_REFS = Vector{Ref}()
+const _LIB_LIFETIME_REFS = Vector{Ref}() # any refs that need to be live as long as the library is loaded
+
+# set during __init__
 const _LIBPTR = Ref{Ptr{Cvoid}}(Ptr{Cvoid}(0))
+const _AWSCRT_ALLOCATOR = Ref{Union{Ptr{aws_allocator},Nothing}}(nothing)
 
-function __init__()
-    _LIBPTR[] = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)
-
-    _AWSCRT_ALLOCATOR[] = let level = get(ENV, "AWS_CRT_MEMORY_TRACING", "")
-        if !isempty(level)
-            level = parse(Int, strip(level))
-            level = aws_mem_trace_level(level)
-            if Symbol(level) == :UnknownMember
-                error(
-                    "Invalid value for env var AWS_CRT_MEMORY_TRACING. " *
-                    "See aws_mem_trace_level docs for valid values.",
-                )
-            end
-            frames_per_stack = parse(Int, strip(get(ENV, "AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK", "0")))
-            aws_mem_tracer_new(aws_default_allocator(), C_NULL, level, frames_per_stack)
-        else
-            aws_default_allocator()
-        end
-    end
-
-    let log_level = get(ENV, "AWS_CRT_LOG_LEVEL", "")
-        if !isempty(log_level)
-            log_level = parse(Int, strip(log_level))
-            log_level = aws_log_level(log_level)
-            if Symbol(log_level) == :UnknownMember
-                error("Invalid value for env var AWS_CRT_LOG_LEVEL. See aws_log_level docs for valid values.")
-            end
-
-            log_path = get(ENV, "AWS_CRT_LOG_PATH", "")
-            if isempty(log_path)
-                error("Env var AWS_CRT_LOG_PATH must be set to the path at which to save the log file.")
-            end
-            log_path = Ref(deepcopy(log_path))
-            push!(_GLOBAL_REFS, log_path)
-
-            logger = Ref(aws_logger(C_NULL, C_NULL, C_NULL))
-            push!(_GLOBAL_REFS, logger)
-
-            logger_options =
-                Ref(aws_logger_standard_options(log_level, Base.unsafe_convert(Ptr{Cchar}, log_path[]), C_NULL))
-            push!(_GLOBAL_REFS, logger_options)
-
-            aws_logger_init_standard(logger, _AWSCRT_ALLOCATOR[], logger_options)
-            aws_logger_set(logger)
-        end
-    end
-
-    aws_mqtt_library_init(_AWSCRT_ALLOCATOR[]) # also does io and http
-
-    # TODO try cleanup using this approach https://github.com/JuliaLang/julia/pull/20124/files
-end
+# cfunctions set during __init__
+const _C_ON_CONNECTION_INTERRUPTED = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_CONNECTION_RESUMED = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_CONNECTION_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_DISCONNECT_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_MESSAGE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_SUBSCRIBE_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_UNSUBSCRIBE_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_RESUBSCRIBE_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_ON_PUBLISH_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
 
 function _release(; include_mem_tracer = isempty(get(ENV, "AWS_CRT_MEMORY_TRACING", "")))
     aws_thread_set_managed_join_timeout_ns(5e8) # 0.5 seconds
 
-    i = findfirst(x -> x isa Ref{aws_logger}, _GLOBAL_REFS)
+    i = findfirst(x -> x isa Ref{aws_logger}, _LIB_LIFETIME_REFS)
     if i !== nothing
-        aws_logger_clean_up(_GLOBAL_REFS[i])
+        aws_logger_clean_up(_LIB_LIFETIME_REFS[i])
     end
 
     aws_mqtt_library_clean_up() # also does io and http
-    empty!(_GLOBAL_REFS)
+    empty!(_LIB_LIFETIME_REFS)
     if include_mem_tracer
         aws_mem_tracer_destroy(_AWSCRT_ALLOCATOR[])
     end
@@ -133,5 +94,85 @@ export ShadowDocumentPreUpdateCallback
 export ShadowDocumentPostUpdateCallback
 export shadow_client
 export publish_current_state
+
+function __init__()
+    _LIBPTR[] = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)
+
+    _C_ON_CONNECTION_INTERRUPTED[] =
+        @cfunction(_c_on_connection_interrupted, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Ptr{Cvoid}))
+    _C_ON_CONNECTION_RESUMED[] =
+        @cfunction(_c_on_connection_resumed, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Ptr{Cvoid}))
+    _C_ON_CONNECTION_COMPLETE[] =
+        @cfunction(_c_on_connection_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Cint, Cuchar, Ptr{Cvoid}))
+    _C_ON_DISCONNECT_COMPLETE[] =
+        @cfunction(_c_on_disconnect_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Ptr{Cvoid}))
+    _C_ON_MESSAGE[] = @cfunction(
+        _c_on_message,
+        Cvoid,
+        (Ptr{aws_mqtt_client_connection}, Ptr{aws_byte_cursor}, Ptr{aws_byte_cursor}, Cuchar, Cint, Cuchar, Ptr{Cvoid})
+    )
+    _C_ON_SUBSCRIBE_COMPLETE[] = @cfunction(
+        _c_on_subscribe_complete,
+        Cvoid,
+        (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_byte_cursor}, Cint, Cint, Ptr{Cvoid})
+    )
+    _C_ON_UNSUBSCRIBE_COMPLETE[] =
+        @cfunction(_c_on_unsubscribe_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+    _C_ON_RESUBSCRIBE_COMPLETE[] = @cfunction(
+        _c_on_resubscribe_complete,
+        Cvoid,
+        (Ptr{aws_mqtt_client_connection}, Cuint, Ptr{aws_array_list}, Cint, Ptr{Cvoid})
+    )
+    _C_ON_PUBLISH_COMPLETE[] =
+        @cfunction(_c_on_publish_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+
+    _AWSCRT_ALLOCATOR[] = let level = get(ENV, "AWS_CRT_MEMORY_TRACING", "")
+        if !isempty(level)
+            level = parse(Int, strip(level))
+            level = aws_mem_trace_level(level)
+            if Symbol(level) == :UnknownMember
+                error(
+                    "Invalid value for env var AWS_CRT_MEMORY_TRACING. " *
+                    "See aws_mem_trace_level docs for valid values.",
+                )
+            end
+            frames_per_stack = parse(Int, strip(get(ENV, "AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK", "0")))
+            aws_mem_tracer_new(aws_default_allocator(), C_NULL, level, frames_per_stack)
+        else
+            aws_default_allocator()
+        end
+    end
+
+    let log_level = get(ENV, "AWS_CRT_LOG_LEVEL", "")
+        if !isempty(log_level)
+            log_level = parse(Int, strip(log_level))
+            log_level = aws_log_level(log_level)
+            if Symbol(log_level) == :UnknownMember
+                error("Invalid value for env var AWS_CRT_LOG_LEVEL. See aws_log_level docs for valid values.")
+            end
+
+            log_path = get(ENV, "AWS_CRT_LOG_PATH", "")
+            if isempty(log_path)
+                error("Env var AWS_CRT_LOG_PATH must be set to the path at which to save the log file.")
+            end
+            log_path = Ref(deepcopy(log_path))
+            push!(_LIB_LIFETIME_REFS, log_path)
+
+            logger = Ref(aws_logger(C_NULL, C_NULL, C_NULL))
+            push!(_LIB_LIFETIME_REFS, logger)
+
+            logger_options =
+                Ref(aws_logger_standard_options(log_level, Base.unsafe_convert(Ptr{Cchar}, log_path[]), C_NULL))
+            push!(_LIB_LIFETIME_REFS, logger_options)
+
+            aws_logger_init_standard(logger, _AWSCRT_ALLOCATOR[], logger_options)
+            aws_logger_set(logger)
+        end
+    end
+
+    aws_mqtt_library_init(_AWSCRT_ALLOCATOR[]) # also does io and http
+
+    # TODO try cleanup using this approach https://github.com/JuliaLang/julia/pull/20124/files
+end
 
 end

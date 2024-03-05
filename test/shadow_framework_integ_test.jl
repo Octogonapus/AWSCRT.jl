@@ -135,6 +135,8 @@ end
         @test doc["foo"] == 2 # check the update did not happen
 
         fetch(unsubscribe(oobsc.shadow_client)[1])
+    catch ex
+        @error exception = (ex, catch_backtrace())
     finally
         fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1])
     end
@@ -428,6 +430,7 @@ end
             wait_for(() -> length(update_msgs) >= 3)
             @test length(update_msgs) == 3
             payloads = [JSON.parse(it.payload) for it in update_msgs]
+            # FIXME: this test can be flaky
             @test any(it -> maybe_get(it, "state", "reported", "foo") == 1, payloads) # from the initial update since the shadow doc didn't exist
             @test any(it -> maybe_get(it, "state", "reported", "foo") == 2, payloads) # from our desired state update above
 
