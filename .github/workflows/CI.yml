@@ -1,39 +1,129 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    name: test ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version:
           - "1.9"
+          - "1.10"
         os:
           - ubuntu-latest
-          - macOS-latest
+          # - macOS-latest
         arch:
           - x64
+    permissions:
+      id-token: write # for OIDC
+      contents: read # to clone
+    env:
+      AWS_DEFAULT_REGION: us-east-1
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+
       - uses: julia-actions/cache@v1
+
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::533267155197:role/AWSCRT-OIDC
+          role-session-name: awscrt-test
+          role-duration-seconds: 3600
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Run regular tests
+        uses: julia-actions/julia-runtest@v1
         env:
           ENDPOINT: ${{ secrets.ENDPOINT }}
           CERT_STRING: ${{ secrets.CERT_STRING }}
           PRI_KEY_STRING: ${{ secrets.PRI_KEY_STRING }}
+
+      - name: Run parallel tests
+        env:
+          ENDPOINT: ${{ secrets.ENDPOINT }}
+          CERT_STRING: ${{ secrets.CERT_STRING }}
+          PRI_KEY_STRING: ${{ secrets.PRI_KEY_STRING }}
+          AWSCRT_TESTS_PARALLEL: true
+        run: |
+          NTHREADS=$(($(nproc) * 2))
+          NTIMES=50
+          julia -t $NTHREADS test/run_parallel_commands.jl $NTIMES julia -t 2 --project -e 'using Pkg; Pkg.test()'
+
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v2
+
+      - uses: codecov/codecov-action@v4
+        with:
+          file: ./lcov.info
+          fail_ci_if_error: false
+
+  downgrade-test:
+    name: downgrade-test ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - "1.9"
+          - "1.10"
+        os:
+          - ubuntu-latest
+          # - macOS-latest
+        arch:
+          - x64
+    permissions:
+      id-token: write # for OIDC
+      contents: read # to clone
+    env:
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+
+      - uses: julia-actions/cache@v1
+
+      - uses: julia-actions/julia-downgrade-compat@v1
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::533267155197:role/AWSCRT-OIDC
+          role-session-name: awscrt-test
+          role-duration-seconds: 3600
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Run regular tests
+        uses: julia-actions/julia-runtest@v1
+        env:
+          ENDPOINT: ${{ secrets.ENDPOINT }}
+          CERT_STRING: ${{ secrets.CERT_STRING }}
+          PRI_KEY_STRING: ${{ secrets.PRI_KEY_STRING }}
+
+      - uses: julia-actions/julia-processcoverage@v1
+
+      - uses: codecov/codecov-action@v4
         with:
           file: ./lcov.info
           fail_ci_if_error: false
@@ -46,19 +136,24 @@ jobs:
       matrix:
         version:
           - "1.9"
+          - "1.10"
         os:
           - ubuntu-latest
-          - macOS-latest
+          # - macOS-latest
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+
       - uses: julia-actions/cache@v1
+
       - uses: julia-actions/julia-buildpkg@v1
+
       - run: |
           julia --project -e 'import Pkg; Pkg.develop(path=".."); Pkg.instantiate(); Pkg.build();'
           MQTT_ENABLED=false julia --project=sysimage -e 'import Pkg; Pkg.instantiate(); Pkg.build(); include(joinpath("sysimage", "build_sysimage.jl")); build()'

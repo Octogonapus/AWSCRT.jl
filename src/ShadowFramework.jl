@@ -35,14 +35,15 @@ Arguments:
 """
 const ShadowDocumentPostUpdateCallback = Function
 
-struct ShadowFramework{T}
-    _id::Int
-    _shadow_document_lock::ReentrantLock
-    _shadow_client::Union{ShadowClient,Nothing} # set to nothing in unit tests
-    _shadow_document::T
-    _shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback}
-    _shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback
-    _shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback
+mutable struct ShadowFramework{T}
+    const _id::Int
+    const _shadow_document_lock::ReentrantLock
+    const _shadow_client::Union{ShadowClient,Nothing} # set to nothing in unit tests
+    const _shadow_document::T
+    const _shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback}
+    const _shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback
+    const _shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback
+    _sync_latch::CountDownLatch
 
     function ShadowFramework(
         id::Int,
@@ -72,6 +73,7 @@ struct ShadowFramework{T}
             shadow_document_property_callbacks,
             shadow_document_pre_update_callback,
             shadow_document_post_update_callback,
+            CountDownLatch(1),
         )
     end
 end
@@ -179,20 +181,20 @@ shadow_client(sf::ShadowFramework) = sf._shadow_client
 Subscribes to the shadow document's topics and begins processing updates.
 The `sf` is always locked before reading/writing from/to the shadow document.
 If the remote shadow document does not exist, the local shadow document will be used to create it.
+
 Publishes an initial message to the `/get` topic to synchronize the shadow document with the broker's state.
+You can call `wait_until_synced(sf)` if you need to wait until this synchronization is done.
 
 $publish_return_docs
 """
 function subscribe(sf::ShadowFramework{T}) where {T}
+    sf._sync_latch = CountDownLatch(1)
     callback = _create_sf_callback(sf)
-    tasks_and_ids = subscribe(sf._shadow_client, AWS_MQTT_QOS_AT_LEAST_ONCE, callback)
-
+    task, id = subscribe(sf._shadow_client, AWS_MQTT_QOS_AT_LEAST_ONCE, callback)
     # Wait for the subscriptions to finish before publishing the initial /get so that we are guaranteed to be able
     # to receive the reply
-    for (task, id) in tasks_and_ids
-        task_result = fetch(task)
-        @debug "SF-$(sf._id): connect" id task_result
-    end
+    task_result = fetch(task)
+    @debug "SF-$(sf._id): subscribe" id task_result
 
     # Publish an initial get to synchronize the local document
     @debug "SF-$(sf._id): publishing initial shadow /get"
@@ -203,10 +205,14 @@ end
     unsubscribe(sf::ShadowFramework{T}) where {T}
 
 Unsubscribes from the shadow document's topics and stops processing updates.
+After calling this, `wait_until_synced(sf)` will again block until the first publish in response to
+calling `subscribe(sf)`.
 
 $_iot_shadow_unsubscribe_return_docs
 """
-unsubscribe(sf::ShadowFramework{T}) where {T} = unsubscribe(sf._shadow_client)
+function unsubscribe(sf::ShadowFramework{T}) where {T}
+    return unsubscribe(sf._shadow_client)
+end
 
 """
 Publishes the current state of the shadow document.
@@ -220,6 +226,17 @@ function publish_current_state(sf::ShadowFramework{T}; include_version::Bool = t
     current_state = _create_reported_state_payload(sf; include_version)
     @debug "SF-$(sf._id): publishing shadow update" current_state
     return publish(sf._shadow_client, "/update", current_state, AWS_MQTT_QOS_AT_LEAST_ONCE)
+end
+
+"""
+    wait_until_synced(sf::ShadowFramework)
+
+Blocks until the next time the shadow document is synchronized with the broker.
+"""
+function wait_until_synced(sf::ShadowFramework)
+    sf._sync_latch = CountDownLatch(1)
+    await(sf._sync_latch)
+    return nothing
 end
 
 function _create_sf_callback(sf::ShadowFramework{T}) where {T}
@@ -238,18 +255,17 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # (isequals implementation, struct definition, etc.). we need to avoid endless communications.
             updated = _update_local_shadow_from_get!(sf, payload)
             if updated
-                task, id = publish_current_state(sf)
-                task_result = fetch(task)
-                @debug id task_result
+                publish_current_state(sf)
+            else
+                # no update to do, we're already synced
+                count_down(sf._sync_latch)
             end
         elseif endswith(topic, "/get/rejected")
             # there is no shadow document, so we need to publish the first version. do not include a version number
             # because we have no idea what the version is. AWS IoT remembers the version number even after you delete
             # the shadow document. when we publish an initial /update without a version number, it's guaranteed to pass
             # the version check and if it's accepted, we will get an /update/accepted containing the new version number.
-            task, id = publish_current_state(sf; include_version = false)
-            task_result = fetch(task)
-            @debug id task_result
+            publish_current_state(sf; include_version = false)
         elseif endswith(topic, "/update/delta")
             # there was an update published that doesn't match our reported state, so update our state to match
             # and publish our new state
@@ -257,14 +273,16 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # we still need to check updated here, because there's a chance the delta state is permanent due to the
             # user's configuration (isequals implementation, struct definition, etc.). we need to avoid endless communications.
             if updated
-                task, id = publish_current_state(sf)
-                task_result = fetch(task)
-                @debug id task_result
+                publish_current_state(sf)
+            else
+                # no update to do, we're already synced
+                count_down(sf._sync_latch)
             end
         elseif endswith(topic, "/update/accepted")
             # our update was accepted, which means the broker incremented the version number. we need to use the new
             # version number before publishing a new update or it will be rejected. sync to pull in the new version number
             _sync_version!(sf._shadow_document, payload)
+            count_down(sf._sync_latch)
         end
     end
 end
@@ -278,19 +296,21 @@ Returns `true` if the local shadow was updated.
 function _update_local_shadow_from_get!(sf::ShadowFramework{T}, payload_str::String) where {T}
     payload = JSON.parse(payload_str)
     version = get(payload, "version", nothing)
-    if _version_allows_update(sf._shadow_document, version)
-        _set_version!(sf._shadow_document, version)
-        state = get(payload, "state", nothing)
-        if state !== nothing
-            delta = get(state, "delta", nothing)
-            if delta !== nothing
-                return _do_local_shadow_update!(sf, delta)
+    return lock(sf) do
+        if _version_allows_update(sf._shadow_document, version)
+            _set_version!(sf._shadow_document, version)
+            state = get(payload, "state", nothing)
+            if state !== nothing
+                delta = get(state, "delta", nothing)
+                if delta !== nothing
+                    return _do_local_shadow_update!(sf, delta)
+                end
             end
+        else
+            @debug "SF-$(sf._id): not processing shadow delta because its version ($version) is less than the current version ($(_version(sf._shadow_document)))"
         end
-    else
-        @debug "SF-$(sf._id): not processing shadow delta because its version ($version) is less than the current version ($(_version(sf._shadow_document)))"
+        return false
     end
-    return false
 end
 
 """
@@ -302,16 +322,18 @@ Returns `true` if the local shadow was updated.
 function _update_local_shadow_from_delta!(sf::ShadowFramework{T}, payload_str::String) where {T}
     payload = JSON.parse(payload_str)
     version = get(payload, "version", nothing)
-    if _version_allows_update(sf._shadow_document, version)
-        _set_version!(sf._shadow_document, version)
-        state = get(payload, "state", nothing)
-        if state !== nothing
-            return _do_local_shadow_update!(sf, state)
+    return lock(sf) do
+        if _version_allows_update(sf._shadow_document, version)
+            _set_version!(sf._shadow_document, version)
+            state = get(payload, "state", nothing)
+            if state !== nothing
+                return _do_local_shadow_update!(sf, state)
+            end
+        else
+            @debug "SF-$(sf._id): not processing shadow delta because its version ($version) is less than the current version ($(_version(sf._shadow_document)))"
         end
-    else
-        @debug "SF-$(sf._id): not processing shadow delta because its version ($version) is less than the current version ($(_version(sf._shadow_document)))"
+        return false
     end
-    return false
 end
 
 """
@@ -323,9 +345,9 @@ end
  4. Returns `true` if any updated occured.
 """
 function _do_local_shadow_update!(sf::ShadowFramework{T}, state::Dict{String,<:Any}) where {T}
-    _fire_pre_update_callback(sf, state)
-    any_updates = false
-    lock(sf) do
+    return lock(sf) do
+        _fire_pre_update_callback(sf, state)
+        any_updates = false
         for (k, v) in state
             updated = _update_shadow_property!(sf, k, v)
             if updated
@@ -333,9 +355,9 @@ function _do_local_shadow_update!(sf::ShadowFramework{T}, state::Dict{String,<:A
                 any_updates = true
             end
         end
+        _fire_post_update_callback(sf)
+        return any_updates
     end
-    _fire_post_update_callback(sf)
-    return any_updates
 end
 
 function _fire_pre_update_callback(sf::ShadowFramework{T}, state::Dict{String,<:Any}) where {T}
@@ -370,7 +392,7 @@ function _fire_callback(sf::ShadowFramework{T}, key::String, value) where {T}
 end
 
 function _create_reported_state_payload(sf::ShadowFramework{T}; include_version = true) where {T}
-    lock(sf) do
+    return lock(sf) do
         d = Dict()
         d["state"] = Dict("reported" => Dict(_get_shadow_property_pairs(sf._shadow_document)))
         if include_version

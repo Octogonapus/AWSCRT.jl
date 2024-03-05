@@ -67,16 +67,22 @@ Arguments:
 - `qos (aws_mqtt_qos)`: $subscribe_qos_docs
 - `callback (OnShadowMessage)`: Callback invoked when message received. See [`OnShadowMessage`](@ref) for the required signature.
 
-Returns the tasks from each subscribe call (`/get/#`, `/update/#`, and `/delete/#`).
+Returns a task which completes when the tasks from each [`subscribe`](@ref) call complete.
+Also returns a collection containing the packet ID from each [`subscribe`](@ref) call.
 """
 function subscribe(client::ShadowClient, qos::aws_mqtt_qos, callback::OnShadowMessage)
     mqtt_callback =
         (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) ->
             callback(client, topic, payload, dup, qos, retain)
-    getf = subscribe(client, "/get/#", qos, mqtt_callback)
-    updatef = subscribe(client, "/update/#", qos, mqtt_callback)
-    deletef = subscribe(client, "/delete/#", qos, mqtt_callback)
-    return getf, updatef, deletef
+    get_task, get_id = subscribe(client, "/get/#", qos, mqtt_callback)
+    update_task, update_id = subscribe(client, "/update/#", qos, mqtt_callback)
+    delete_task, delete_id = subscribe(client, "/delete/#", qos, mqtt_callback)
+    t = Threads.@spawn begin
+        fetch(get_task)
+        fetch(update_task)
+        fetch(delete_task)
+    end
+    return t, (get_id, update_id, delete_id)
 end
 
 """
@@ -116,7 +122,7 @@ const _UNSUBCRIBE_TOPICS = [
     "/delete/rejected",
 ]
 
-const _iot_shadow_unsubscribe_return_docs = "Returns a list of the tasks from each [`unsubscribe`](@ref) call."
+const _iot_shadow_unsubscribe_return_docs = "Returns a task which completes when the tasks from each [`unsubscribe`](@ref) call complete. Also returns a collection containing the packet ID from each [`unsubscribe`](@ref) call."
 
 """
     unsubscribe(client::ShadowClient)
@@ -131,12 +137,15 @@ $_iot_shadow_unsubscribe_return_docs
 function unsubscribe(client::ShadowClient)
     # there is no function in the CRT to get the current topics (though they are stored internally)
     # so we need to unsubscribe from every possible topic
-    out = []
+    tasks = Task[]
+    ids = Int[]
     for topic in _UNSUBCRIBE_TOPICS
         @debug "unsubscribing from $(client.shadow_topic_prefix)$topic"
-        push!(out, unsubscribe(client.connection, "$(client.shadow_topic_prefix)$topic"))
+        task, id = unsubscribe(client.connection, "$(client.shadow_topic_prefix)$topic")
+        push!(tasks, task)
+        push!(ids, id)
     end
-    return out
+    return (Threads.@spawn fetch.(tasks)), ids
 end
 
 """
