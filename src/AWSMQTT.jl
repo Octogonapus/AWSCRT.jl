@@ -1122,9 +1122,9 @@ function _c_on_publish_complete(
     else
         Dict(:packet_id => UInt(packet_id))
     end
-    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnPublishCompleteUD}
+    data = Base.unsafe_pointer_to_objref(userdata)::_OnPublishCompleteUD
     try
-        put!(data[].ch, _OnPublishCompleteEvent(data[].callback, result))
+        put!(data.ch, _OnPublishCompleteEvent(data.callback, result))
     catch ex
         if ex isa InvalidStateException && ex.state == :closed
         else
@@ -1235,20 +1235,18 @@ function publish(
     callback::Union{Function,Nothing} = nothing, # FIXME document
 )
     out_ch = Channel(1)
-    userdata = Ref(
-        _OnPublishCompleteUD(
-            connection.events,
-            (msg) -> begin
-                put!(out_ch, msg)
-                if callback !== nothing
-                    try
-                        callback()
-                    catch ex
-                        @error "on_publish_complete user callback errored" exception = (ex, catch_backtrace())
-                    end
+    userdata = _OnPublishCompleteUD(
+        connection.events,
+        (msg) -> begin
+            put!(out_ch, msg)
+            if callback !== nothing
+                try
+                    callback()
+                catch ex
+                    @error "on_publish_complete user callback errored" exception = (ex, catch_backtrace())
                 end
-            end,
-        ),
+            end
+        end,
     )
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
