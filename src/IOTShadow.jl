@@ -152,6 +152,6 @@ Arguments:
 
 $publish_return_docs
 """
-function publish(client::ShadowClient, topic::String, payload::String, qos::aws_mqtt_qos)
-    return publish(client.connection, "$(client.shadow_topic_prefix)$topic", payload, qos)
+function publish(client::ShadowClient, topic::String, payload::String, qos::aws_mqtt_qos; kwargs...)
+    return publish(client.connection, "$(client.shadow_topic_prefix)$topic", payload, qos; kwargs...)
 end

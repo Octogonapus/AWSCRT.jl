@@ -94,6 +94,7 @@ export ShadowDocumentPreUpdateCallback
 export ShadowDocumentPostUpdateCallback
 export shadow_client
 export publish_current_state
+export wait_until_first_publish_complete
 
 function __init__()
     _LIBPTR[] = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)

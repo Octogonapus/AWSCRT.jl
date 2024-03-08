@@ -5,6 +5,6 @@ ENV["AWS_CRT_LOG_LEVEL"] = "6"
 ENV["AWS_CRT_LOG_PATH"] = joinpath(@__DIR__, "log.txt")
 ENV["JULIA_DEBUG"] = "AWSCRT"
 
-using Test, AWSCRT, LibAWSCRT, JSON, CountDownLatches, Random, Documenter, Aqua
+using Test, AWSCRT, LibAWSCRT, JSON, CountDownLatches, Random, Documenter, Aqua, Dates
 
 include("util.jl")

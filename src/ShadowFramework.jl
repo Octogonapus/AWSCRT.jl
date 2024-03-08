@@ -43,6 +43,7 @@ struct ShadowFramework{T}
     _shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback}
     _shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback
     _shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback
+    _initial_publish_latch::CountDownLatch
 
     function ShadowFramework(
         id::Int,
@@ -72,6 +73,7 @@ struct ShadowFramework{T}
             shadow_document_property_callbacks,
             shadow_document_pre_update_callback,
             shadow_document_post_update_callback,
+            CountDownLatch(1),
         )
     end
 end
@@ -216,11 +218,17 @@ Arguments:
 
 $publish_return_docs
 """
-function publish_current_state(sf::ShadowFramework{T}; include_version::Bool = true) where {T}
+function publish_current_state(
+    sf::ShadowFramework{T};
+    include_version::Bool = true,
+    callback::Union{Function,Nothing} = nothing,
+) where {T}
     current_state = _create_reported_state_payload(sf; include_version)
     @debug "SF-$(sf._id): publishing shadow update" current_state
-    return publish(sf._shadow_client, "/update", current_state, AWS_MQTT_QOS_AT_LEAST_ONCE)
+    return publish(sf._shadow_client, "/update", current_state, AWS_MQTT_QOS_AT_LEAST_ONCE; callback)
 end
+
+wait_until_first_publish_complete(sf::ShadowFramework) = await(sf._initial_publish_latch)
 
 function _create_sf_callback(sf::ShadowFramework{T}) where {T}
     return function shadow_callback(
@@ -238,18 +246,22 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # (isequals implementation, struct definition, etc.). we need to avoid endless communications.
             updated = _update_local_shadow_from_get!(sf, payload)
             if updated
-                task, id = publish_current_state(sf)
-                task_result = fetch(task)
-                @debug id task_result
+                task, id = publish_current_state(sf, callback = () -> count_down(sf._initial_publish_latch))
+                # task_result = fetch(task)
+                # @debug id task_result
             end
         elseif endswith(topic, "/get/rejected")
             # there is no shadow document, so we need to publish the first version. do not include a version number
             # because we have no idea what the version is. AWS IoT remembers the version number even after you delete
             # the shadow document. when we publish an initial /update without a version number, it's guaranteed to pass
             # the version check and if it's accepted, we will get an /update/accepted containing the new version number.
-            task, id = publish_current_state(sf; include_version = false)
-            task_result = fetch(task)
-            @debug id task_result
+            task, id = publish_current_state(
+                sf;
+                include_version = false,
+                callback = () -> count_down(sf._initial_publish_latch),
+            )
+            # task_result = fetch(task)
+            # @debug id task_result
         elseif endswith(topic, "/update/delta")
             # there was an update published that doesn't match our reported state, so update our state to match
             # and publish our new state
@@ -257,9 +269,9 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # we still need to check updated here, because there's a chance the delta state is permanent due to the
             # user's configuration (isequals implementation, struct definition, etc.). we need to avoid endless communications.
             if updated
-                task, id = publish_current_state(sf)
-                task_result = fetch(task)
-                @debug id task_result
+                task, id = publish_current_state(sf, callback = () -> count_down(sf._initial_publish_latch))
+                # task_result = fetch(task)
+                # @debug id task_result
             end
         elseif endswith(topic, "/update/accepted")
             # our update was accepted, which means the broker incremented the version number. we need to use the new

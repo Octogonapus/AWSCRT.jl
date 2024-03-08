@@ -1,5 +1,12 @@
 include("testheader.jl")
 
+Base.errormonitor(Threads.@spawn begin
+    while true
+        GC.gc(true)
+        sleep(1)
+    end
+end)
+
 @testset "AWSCRT" begin
     doctest(AWSCRT)
     @testset "Aqua" begin

@@ -120,6 +120,10 @@ Arguments:
 mutable struct MQTTConnection
     ptr::Ptr{aws_mqtt_client_connection}
     client::MQTTClient
+
+    run_event_loop::Threads.Atomic{Bool}
+    events::Channel{Any} # all events from all callbacks
+
     on_connection_complete_refs::Vector{Ref}
 
     on_subscribe_complete_refs_lock::ReentrantLock
@@ -133,8 +137,9 @@ mutable struct MQTTConnection
     on_message_refs_lock::ReentrantLock
     on_message_refs::Vector{Ref}
 
+    next_on_publish_complete_ref_id::Threads.Atomic{Int}
     on_publish_complete_refs_lock::ReentrantLock
-    on_publish_complete_refs::Dict{String,Vector{Ref}}
+    on_publish_complete_refs::Dict{Int,Vector{Ref}}
 
     connection_lifetime_refs_lock::ReentrantLock
     connection_lifetime_refs::Vector{Ref} # refs that must be live until this connection object is dead
@@ -145,9 +150,31 @@ mutable struct MQTTConnection
             error("Failed to create connection")
         end
 
-        out = new(
+        run_event_loop = Threads.Atomic{Bool}(true)
+        events = Channel{Any}(Inf)
+        # TODO document how this event loop works. all mqtt events are dispatched by a single event loop (this one) and processed concurrently. e.g. two subscription callbacks on the same topic won't block each other and will run concurrently.
+        Base.errormonitor(Threads.@spawn begin # TODO let user specify threadpool and static
+            @error "EVENT LOOP STARTED"
+            while run_event_loop[]
+                try
+                    msg = take!(events)
+                    Base.errormonitor(Threads.@spawn _dispatch_event(msg))
+                catch ex
+                    if ex isa InvalidStateException && ex.state == :closed
+                        # the channel was closed because the connection is being finalized. this is not an error.
+                        return
+                    end
+                    @error "error while processing events" exception = (ex, catch_backtrace())
+                end
+            end
+            @error "EVENT LOOP STOPPED"
+        end)
+
+        this = new(
             ptr,
             client,
+            run_event_loop,
+            events,
             Ref[],
             ReentrantLock(),
             Dict{String,Vector{Ref}}(),
@@ -156,13 +183,16 @@ mutable struct MQTTConnection
             Dict{String,Vector{Ref}}(),
             ReentrantLock(),
             Ref[],
+            Threads.Atomic{Int}(0),
             ReentrantLock(),
-            Dict{String,Vector{Ref}}(),
+            Dict{Int,Vector{Ref}}(),
             ReentrantLock(),
             Ref[],
         )
-        return finalizer(out) do x
-            aws_mqtt_client_connection_release(x.ptr)
+        return finalizer(this) do this
+            close(this.events)
+            this.run_event_loop[] = false
+            aws_mqtt_client_connection_release(this.ptr)
         end
     end
 end
@@ -196,9 +226,16 @@ struct Will
     retain::Bool
 end
 
-mutable struct _OnConnectionInterruptedUserData # mutable so it has a stable address
-    connection::MQTTConnection
-    callback::OnConnectionInterrupted
+struct _OnConnectionInterruptedEvent
+    callback::Function
+    error_code::Int
+end
+
+_dispatch_event(event::_OnConnectionInterruptedEvent) = Base.invokelatest(event.callback, event.error_code)
+
+mutable struct _OnConnectionInterruptedUserData # mutable so it is heap allocated and has a stable address
+    ch::Channel{Any}
+    callback::Function
 end
 
 function _c_on_connection_interrupted(
@@ -206,14 +243,32 @@ function _c_on_connection_interrupted(
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnConnectionResumedUserData}
-    data[].callback(data[].connection, error_code)
+    try
+        put!(data[].ch, _OnConnectionInterruptedEvent(data[].callback, error_code))
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
     return nothing
 end
 
-mutable struct _OnConnectionResumedUserData # mutable so it has a stable address
-    connection::MQTTConnection
-    callback::OnConnectionResumed
+struct _OnConnectionResumedEvent
+    callback::Function
+    return_code::aws_mqtt_connect_return_code
+    session_present::Bool
+end
+
+_dispatch_event(event::_OnConnectionResumedEvent) =
+    Base.invokelatest(event.callback, event.return_code, event.session_present)
+
+mutable struct _OnConnectionResumedUserData # mutable so it is heap allocated and has a stable address
+    ch::Channel{Any}
+    callback::Function
 end
 
 function _c_on_connection_resumed(
@@ -222,12 +277,24 @@ function _c_on_connection_resumed(
     session_present::Cint,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnConnectionResumedUserData}
-    data[].callback(data[].connection, aws_mqtt_connect_return_code(return_code), session_present != 0)
+    try
+        put!(
+            data[].ch,
+            _OnConnectionResumedEvent(data[].callback, aws_mqtt_connect_return_code(return_code), session_present != 0),
+        )
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
     return nothing
 end
 
-mutable struct _OnConnectionCompleteUserData # mutable so it has a stable address
+mutable struct _OnConnectionCompleteUserData # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
 end
 
@@ -238,6 +305,8 @@ function _c_on_connection_complete(
     session_present::Cuchar,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     result = if return_code != AWS_MQTT_CONNECT_ACCEPTED
         ErrorException("Connection failed. $(aws_err_string(return_code))")
     elseif error_code != AWS_ERROR_SUCCESS
@@ -246,7 +315,14 @@ function _c_on_connection_complete(
         Dict(:session_present => session_present != 0)
     end
     data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnConnectionCompleteUserData}
-    put!(data[].ch, result)
+    try
+        put!(data[].ch, result)
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
     return nothing
 end
 
@@ -342,7 +418,7 @@ function connect(
     end
 
     on_connection_interrupted_user_data = if on_connection_interrupted !== nothing
-        ud = Ref(_OnConnectionInterruptedUserData(connection, on_connection_interrupted))
+        ud = Ref(_OnConnectionInterruptedUserData(connection.events, on_connection_interrupted))
         # The user data must be live until the connection is dead because the callback can run and use it
         @_con_preserve connection ud
         ud
@@ -351,7 +427,7 @@ function connect(
     end
 
     on_connection_resumed_user_data = if on_connection_resumed !== nothing
-        ud = Ref(_OnConnectionResumedUserData(connection, on_connection_resumed))
+        ud = Ref(_OnConnectionResumedUserData(connection.events, on_connection_resumed))
         # The user data must be live until the connection is dead because the callback can run and use it
         @_con_preserve connection ud
         ud
@@ -413,9 +489,10 @@ function connect(
         out_ch = Channel(1)
         on_connection_complete_user_data = Ref(_OnConnectionCompleteUserData(out_ch))
         # The user data must be live until the connection is dead because the callback can run and use it
-        @_con_preserve connection on_connection_complete_user_data
+        # @_con_preserve connection on_connection_complete_user_data
 
-        GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur out_ch begin
+        GC.@preserve server_name_cur socket_options tls_connection_options client_id_cur begin
+            # on_connection_complete_user_data must persist until the on_connection_complete callback finishes
             conn_options = Ref(
                 aws_mqtt_connection_options(
                     server_name_cur[],
@@ -438,7 +515,7 @@ function connect(
             end
 
             return Threads.@spawn begin
-                GC.@preserve connection conn_options begin
+                GC.@preserve conn_options on_connection_complete_user_data begin
                     result = take!(out_ch)
                     if result isa Exception
                         throw(result)
@@ -453,11 +530,13 @@ function connect(
     end
 end
 
-mutable struct _OnDisconnectCompleteUserData # mutable so it has a stable address
+mutable struct _OnDisconnectCompleteUserData # mutable so it is heap allocated and has a stable address
     latch::CountDownLatch
 end
 
 function _c_on_disconnect_complete(connection::Ptr{aws_mqtt_client_connection}, userdata::Ptr{Cvoid})
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnDisconnectCompleteUserData}
     count_down(data[].latch)
     return nothing
@@ -476,14 +555,15 @@ function disconnect(connection::MQTTConnection)
     userdata = Ref(_OnDisconnectCompleteUserData(latch))
     @_con_preserve connection userdata
 
-    GC.@preserve connection begin
+    begin # GC.@preserve connection
+        # userdata must persist until the on_disconnect_complete callback is finished
         aws_mqtt_client_connection_disconnect(
             connection.ptr,
             _C_ON_DISCONNECT_COMPLETE[],
             Base.pointer_from_objref(userdata),
         )
-        return @async begin
-            GC.@preserve connection begin
+        return Threads.@spawn begin
+            GC.@preserve userdata begin
                 await(latch)
                 return nothing
             end
@@ -491,7 +571,20 @@ function disconnect(connection::MQTTConnection)
     end
 end
 
-mutable struct _OnMessageUserData # mutable so it has a stable address
+struct OnMessageEvent
+    callback::OnMessage
+    topic::String
+    payload::String
+    dup::Bool
+    qos::aws_mqtt_qos
+    retain::Bool
+end
+
+_dispatch_event(event::OnMessageEvent) =
+    Base.invokelatest(event.callback, event.topic, event.payload, event.dup, event.qos, event.retain)
+
+mutable struct _OnMessageUserData # mutable so it is heap allocated and has a stable address
+    ch::Channel{Any}
     callback::OnMessage
 end
 
@@ -504,6 +597,8 @@ function _c_on_message(
     retain::Cuchar,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     # Make a copy because topic is freed when this function returns
     topic_obj = Base.unsafe_load(topic)
     topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), topic_obj.len, 1)
@@ -515,18 +610,46 @@ function _c_on_message(
     ccall(:memcpy, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t), payload_copy, payload_obj.ptr, payload_obj.len)
 
     data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnMessageUserData}
-    data[].callback(
-        String(Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Cuchar}, topic_copy), topic_obj.len, own = true)),
-        String(Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Cuchar}, payload_copy), payload_obj.len, own = true)),
-        dup != 0,
-        aws_mqtt_qos(qos),
-        retain != 0,
-    )
+    try
+        put!(
+            data[].ch,
+            OnMessageEvent(
+                data[].callback,
+                String(
+                    Base.unsafe_wrap(Array, Base.unsafe_convert(Ptr{Cuchar}, topic_copy), topic_obj.len, own = true),
+                ),
+                String(
+                    Base.unsafe_wrap(
+                        Array,
+                        Base.unsafe_convert(Ptr{Cuchar}, payload_copy),
+                        payload_obj.len,
+                        own = true,
+                    ),
+                ),
+                dup != 0,
+                aws_mqtt_qos(qos),
+                retain != 0,
+            ),
+        )
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
     return nothing
 end
 
-mutable struct _OnSubcribeCompleteUserData # mutable so it has a stable address
+struct _OnSubscribeCompleteEvent
+    callback::Function
+    result::Any
+end
+
+_dispatch_event(event::_OnSubscribeCompleteEvent) = Base.invokelatest(event.callback, event.result)
+
+mutable struct _OnSubcribeCompleteUserData # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
+    callback::Function
 end
 
 function _c_on_subscribe_complete(
@@ -537,6 +660,8 @@ function _c_on_subscribe_complete(
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     # Make a copy because topic is freed when this function returns
     topic_obj = Base.unsafe_load(topic)
     topic_copy = ccall(:calloc, Ptr{Cvoid}, (Csize_t, Csize_t), topic_obj.len, 1)
@@ -555,7 +680,14 @@ function _c_on_subscribe_complete(
     end
 
     data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnSubcribeCompleteUserData}
-    put!(data[].ch, result)
+    try
+        put!(data[].ch, _OnSubscribeCompleteEvent(data[].callback, result))
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
     return nothing
 end
 
@@ -578,62 +710,68 @@ Arguments:
 $subscribe_return_docs
 """
 function subscribe(connection::MQTTConnection, topic::String, qos::aws_mqtt_qos, callback::OnMessage)
-    on_message_user_data = Ref(_OnMessageUserData(callback))
-    # The user data must be live until the subscription for this topic is gone.
-    # Also we can't clear the old refs, if any, until we set the new user data.
-    lock(connection.subscribe_refs_lock) do
-        if haskey(connection.subscribe_refs, topic)
-            push!(connection.subscribe_refs[topic], on_message_user_data)
-        else
-            connection.subscribe_refs[topic] = [on_message_user_data]
-        end
-    end
-
-    out_ch = Channel(1)
-    on_subscribe_complete_user_data = Ref(_OnSubcribeCompleteUserData(out_ch))
-    # The lifetime of the on_subscribe_complete FCB and its token is from SUBSCRIBE to SUBACK so we can preserve it
-    # until the task returned from this function has finished, as it finishes when a SUBACK is received.
-    # We also preserve it on the connection in case we get a stray SUBACK.
-    # Also we can't clear the old refs, if any, until we set the new user data.
-    lock(connection.on_subscribe_complete_refs_lock) do
-        if haskey(connection.on_subscribe_complete_refs, topic)
-            push!(connection.on_subscribe_complete_refs[topic], on_subscribe_complete_user_data)
-        else
-            connection.on_subscribe_complete_refs[topic] = [on_subscribe_complete_user_data]
-        end
-    end
-
-    topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
-    GC.@preserve connection topic_cur out_ch begin
-        packet_id = aws_mqtt_client_connection_subscribe(
-            connection.ptr,
-            topic_cur,
-            qos,
-            _C_ON_MESSAGE[],
-            Base.pointer_from_objref(on_message_user_data),
-            C_NULL, # called when a subscription is removed
-            _C_ON_SUBSCRIBE_COMPLETE[],
-            Base.pointer_from_objref(on_subscribe_complete_user_data),
-        )
-
-        # Now that we set the new user data we can remove the ref to the old user data, if there was any
+    on_message_user_data = Ref(_OnMessageUserData(connection.events, callback))
+    GC.@preserve on_message_user_data begin
+        # The user data must be live until the subscription for this topic is gone.
+        # Also we can't clear the old refs, if any, until we set the new user data.
         lock(connection.subscribe_refs_lock) do
-            connection.subscribe_refs[topic] = [on_message_user_data]
-        end
-        lock(connection.on_subscribe_complete_refs_lock) do
-            connection.on_subscribe_complete_refs[topic] = [on_subscribe_complete_user_data]
+            if haskey(connection.subscribe_refs, topic)
+                push!(connection.subscribe_refs[topic], on_message_user_data)
+            else
+                connection.subscribe_refs[topic] = [on_message_user_data]
+            end
         end
 
-        return (@async begin
-            GC.@preserve connection topic_cur begin
-                result = take!(out_ch)
-                if result isa Exception
-                    throw(result)
-                else
-                    return result
+        out_ch = Channel(1)
+        on_subscribe_complete_user_data =
+            Ref(_OnSubcribeCompleteUserData(connection.events, (msg) -> put!(out_ch, msg)))
+        begin # GC.@preserve on_subscribe_complete_user_data
+            # The lifetime of the userdata is from SUBSCRIBE to SUBACK so we can preserve it
+            # until the task returned from this function has finished, as it finishes when a SUBACK is received.
+            # We also preserve it on the connection in case we get a stray SUBACK.
+            # Also we can't clear the old refs, if any, until we set the new user data.
+            # lock(connection.on_subscribe_complete_refs_lock) do
+            #     if haskey(connection.on_subscribe_complete_refs, topic)
+            #         push!(connection.on_subscribe_complete_refs[topic], on_subscribe_complete_user_data)
+            #     else
+            #         connection.on_subscribe_complete_refs[topic] = [on_subscribe_complete_user_data]
+            #     end
+            # end
+
+            topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
+            begin # GC.@preserve topic_cur out_ch on_message_user_data on_subscribe_complete_user_data
+                # topic_cur, on_subscribe_complete_user_data must persist until the on_subscribe_complete callback is finished
+                packet_id = aws_mqtt_client_connection_subscribe(
+                    connection.ptr,
+                    topic_cur,
+                    qos,
+                    _C_ON_MESSAGE[],
+                    Base.pointer_from_objref(on_message_user_data),
+                    C_NULL, # called when a subscription is removed
+                    _C_ON_SUBSCRIBE_COMPLETE[],
+                    Base.pointer_from_objref(on_subscribe_complete_user_data),
+                )
+
+                # Now that we set the new user data we can remove the ref to the old user data, if there was any
+                lock(connection.subscribe_refs_lock) do
+                    connection.subscribe_refs[topic] = [on_message_user_data]
                 end
+                # lock(connection.on_subscribe_complete_refs_lock) do
+                #     connection.on_subscribe_complete_refs[topic] = [on_subscribe_complete_user_data]
+                # end
+
+                return (Threads.@spawn begin
+                    GC.@preserve topic_cur on_message_user_data on_subscribe_complete_user_data begin
+                        result = take!(out_ch)
+                        if result isa Exception
+                            throw(result)
+                        else
+                            return result
+                        end
+                    end
+                end), packet_id
             end
-        end), packet_id
+        end
     end
 end
 
@@ -664,31 +802,46 @@ function on_message(connection::MQTTConnection, callback::Union{OnMessage,Nothin
 
         return nothing
     else
-        userdata = Ref(_OnMessageUserData(callback))
-        # We can't clear the old refs, if any, until we set the new user data.
-        lock(connection.on_message_refs_lock) do
-            push!(connection.on_message_refs, userdata)
-        end
+        userdata = Ref(_OnMessageUserData(connection.events, callback))
+        GC.@preserve userdata begin
+            # We can't clear the old refs, if any, until we set the new user data.
+            old_refs = copy(connection.on_message_refs)
+            lock(connection.on_message_refs_lock) do
+                push!(connection.on_message_refs, userdata)
+            end
 
-        if aws_mqtt_client_connection_set_on_any_publish_handler(
-            connection.ptr,
-            _C_ON_MESSAGE[],
-            Base.pointer_from_objref(userdata),
-        ) != AWS_OP_SUCCESS
-            error("$_on_message_error $(aws_err_string())")
-        end
+            errno = aws_mqtt_client_connection_set_on_any_publish_handler(
+                connection.ptr,
+                _C_ON_MESSAGE[],
+                Base.pointer_from_objref(userdata),
+            )
+            if errno == AWS_ERROR_INVALID_STATE
+                connection.on_message_refs = old_refs # The new callback and userdata are not set if there was an error
+            end
+            if errno != AWS_OP_SUCCESS
+                error("$_on_message_error $(aws_err_string(errno))")
+            end
 
-        # Now that we set the new user data we can remove the ref to the old user data, if there was any
-        lock(connection.on_message_refs_lock) do
-            connection.on_message_refs = [userdata]
-        end
+            # Now that we set the new user data we can remove the ref to the old user data, if there was any
+            lock(connection.on_message_refs_lock) do
+                connection.on_message_refs = [userdata]
+            end
 
-        return nothing
+            return nothing
+        end
     end
 end
 
-mutable struct OnUnsubscribeCompleteUserData # mutable so it has a stable address
+struct _OnUnsubscribeCompleteEvent
+    callback::Function
+    result::Any
+end
+
+_dispatch_event(event::_OnUnsubscribeCompleteEvent) = Base.invokelatest(event.callback, event.result)
+
+mutable struct _OnUnsubscribeCompleteUserData # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
+    callback::Function
 end
 
 function _c_on_unsubscribe_complete(
@@ -697,14 +850,23 @@ function _c_on_unsubscribe_complete(
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     result = if error_code != AWS_ERROR_SUCCESS
         ErrorException("Unsubscribe failed. $(aws_err_string(error_code))")
     else
         Dict(:packet_id => UInt(packet_id))
     end
 
-    data = Base.unsafe_pointer_to_objref(userdata)::Ref{OnUnsubscribeCompleteUserData}
-    put!(data[].ch, result)
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnUnsubscribeCompleteUserData}
+    try
+        put!(data[].ch, _OnUnsubscribeCompleteEvent(data[].callback, result))
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
 
     return nothing
 end
@@ -733,30 +895,35 @@ $unsubscribe_return_docs
 """
 function unsubscribe(connection::MQTTConnection, topic::String)
     out_ch = Channel(1)
-    userdata = Ref(OnUnsubscribeCompleteUserData(out_ch))
-    # It's not documented, but it seems like the lifetime of the on_unsubscribe_complete FCB and its token is
+    userdata = Ref(_OnUnsubscribeCompleteUserData(connection.events, (msg) -> put!(out_ch, msg)))
+    # It's not documented, but it seems like the lifetime of the userdata is
     # from UNSUBSCRIBE to UNSUBACK so we can preserve it until the task returned from this function has finished,
     # as it finishes when an UNSUBACK is received.
     # That said, I am also scared about a stray UNSUBACK so I will preserve it for the connection lifetime to be safe.
     @_con_preserve connection userdata
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
-    GC.@preserve connection topic_cur out_ch begin
+    begin # GC.@preserve connection topic_cur out_ch
+        # topic_cur, userdata must persist until on_unsubscribe_complete is finished
         packet_id = aws_mqtt_client_connection_unsubscribe(
             connection.ptr,
             topic_cur,
             _C_ON_UNSUBSCRIBE_COMPLETE[],
             Base.pointer_from_objref(userdata),
         )
-        return (@async begin
-            GC.@preserve connection topic_cur begin
+        return (Threads.@spawn begin
+            GC.@preserve topic_cur userdata begin
                 result = take!(out_ch)
                 if result isa Exception
                     throw(result)
                 else
                     # Now that the subscription is done, we can GC its callbacks
-                    connection.subscribe_refs[topic] = Ref[]
-                    connection.on_subscribe_complete_refs[topic] = Ref[]
+                    # lock(connection.subscribe_refs_lock) do
+                    #     connection.subscribe_refs[topic] = Ref[]
+                    # end
+                    # lock(connection.on_subscribe_complete_refs_lock) do
+                    #     connection.on_subscribe_complete_refs[topic] = Ref[]
+                    # end
                     return result
                 end
             end
@@ -764,10 +931,18 @@ function unsubscribe(connection::MQTTConnection, topic::String)
     end
 end
 
-mutable struct _OnResubcribeCompleteUD # mutable so it has a stable address
+struct _OnResubscribeCompleteEvent
+    callback::Function
+    result::Any
+end
+
+_dispatch_event(event::_OnResubscribeCompleteEvent) = Base.invokelatest(event.callback, event.result)
+
+mutable struct _OnResubcribeCompleteUD # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
     aws_array_list_length_ptr::Ptr{Cvoid}
     aws_array_list_get_at_ptr::Ptr{Cvoid}
+    callback::Function
 end
 
 function _c_on_resubscribe_complete(
@@ -777,14 +952,16 @@ function _c_on_resubscribe_complete(
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
-    ud = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnResubcribeCompleteUD}
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnResubcribeCompleteUD}
 
     # topic_subacks is an array list with eltype (struct aws_mqtt_topic_subscription *)
     # We are lent topic_subacks only inside this function. It will be freed as soon as this function returns.
     # Therefore we need to copy it. This list also contains byte cursors, which will also be freed, so we need to
     # deeply copy the topic strings.
 
-    num_topics = ccall(ud[].aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
+    num_topics = ccall(data[].aws_array_list_length_ptr, Csize_t, (Ptr{aws_array_list},), topic_subacks)
 
     # alloc space to hold the eltype of the list (struct aws_mqtt_topic_subscription *)
     sub_i_ptr = Libc.malloc(sizeof(Ptr{Cvoid}))
@@ -801,7 +978,7 @@ function _c_on_resubscribe_complete(
     for i = 1:num_topics
         # call aws_array_list_get_at to load an element into *sub_i_ptr
         ccall(
-            ud[].aws_array_list_get_at_ptr,
+            data[].aws_array_list_get_at_ptr,
             Cint,
             (Ptr{aws_array_list}, Ptr{Cvoid}, Csize_t),
             topic_subacks,
@@ -861,7 +1038,14 @@ function _c_on_resubscribe_complete(
         Dict(:packet_id => UInt(packet_id), :topics => topics_and_qoss)
     end
 
-    put!(ud[].ch, result)
+    try
+        put!(data[].ch, _OnResubscribeCompleteEvent(data[].callback, result))
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
 
     return nothing
 end
@@ -886,20 +1070,21 @@ function resubscribe_existing_topics(connection::MQTTConnection)
     out_ch = Channel(1)
     udata = Ref(
         _OnResubcribeCompleteUD(
-            out_ch,
+            connection.events,
             Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_length),
             Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_get_at),
+            (msg) -> put!(out_ch, msg),
         ),
     )
-    @_con_preserve connection udata
+    GC.@preserve out_ch udata begin
+        @_con_preserve connection udata
 
-    GC.@preserve connection out_ch begin
         packet_id = aws_mqtt_resubscribe_existing_topics(
             connection.ptr,
             _C_ON_RESUBSCRIBE_COMPLETE[],
             Base.pointer_from_objref(udata),
         )
-        return (@async begin
+        return (Threads.@spawn begin
             GC.@preserve connection begin
                 result = take!(out_ch)
                 if result isa Exception
@@ -912,8 +1097,16 @@ function resubscribe_existing_topics(connection::MQTTConnection)
     end
 end
 
-mutable struct _OnPublishCompleteUD # mutable so it has a stable address
+struct _OnPublishCompleteEvent
+    callback::Function
+    result::Any
+end
+
+_dispatch_event(event::_OnPublishCompleteEvent) = Base.invokelatest(event.callback, event.result)
+
+mutable struct _OnPublishCompleteUD # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
+    callback::Function
 end
 
 function _c_on_publish_complete(
@@ -922,13 +1115,22 @@ function _c_on_publish_complete(
     error_code::Cint,
     userdata::Ptr{Cvoid},
 )
+    # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+
     result = if error_code != AWS_ERROR_SUCCESS
         ErrorException("Publish failed. $(aws_err_string(error_code))")
     else
         Dict(:packet_id => UInt(packet_id))
     end
-    ud = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnPublishCompleteUD}
-    put!(ud[].ch, result)
+    data = Base.unsafe_pointer_to_objref(userdata)::Ref{_OnPublishCompleteUD}
+    try
+        put!(data[].ch, _OnPublishCompleteEvent(data[].callback, result))
+    catch ex
+        if ex isa InvalidStateException && ex.state == :closed
+        else
+            rethrow()
+        end
+    end
     return nothing
 end
 
@@ -961,52 +1163,116 @@ Arguments:
 
 $publish_return_docs
 """
-function publish(connection::MQTTConnection, topic::String, payload::String, qos::aws_mqtt_qos, retain::Bool = false)
-    out_ch = Channel(1)
-    userdata = Ref(_OnPublishCompleteUD(out_ch))
+# function publish(
+#     connection::MQTTConnection,
+#     topic::String,
+#     payload::String,
+#     qos::aws_mqtt_qos,
+#     retain::Bool = false;
+#     callback::Union{Function,Nothing} = nothing, # FIXME document
+# )
+#     out_ch = Channel(1)
+#     userdata = Ref(
+#         _OnPublishCompleteUD(
+#             connection.events,
+#             (msg) -> begin
+#                 put!(out_ch, msg)
+#                 if callback !== nothing
+#                     try
+#                         callback()
+#                     catch ex
+#                         @error "on_publish_complete user callback errored" exception = (ex, catch_backtrace())
+#                     end
+#                 end
+#             end,
+#         ),
+#     )
+#     begin # GC.@preserve userdata out_ch
+#         # The user data must persist until the on_complete callback runs.
+#         # Also we can't clear the old refs, if any, until we set the new user data.
+#         id = Threads.atomic_add!(connection.next_on_publish_complete_ref_id, 1)
+#         lock(connection.on_publish_complete_refs_lock) do
+#             connection.on_publish_complete_refs[id] = [userdata]
+#         end
 
-    # It's not documented, but it seems like the lifetime of the on_publish_complete FCB and its token is
-    # from PUBLISH to either packet send, PUBACK, or PUBCOMP depending on QoS level, so we can preserve it until
-    # the task returned from this function has finished, as it finishes when the correct event is received.
-    # We also preserve it on the connection in case we get a stray PUBACK or PUBCOMP, depending on QoS level.
-    # Also we can't clear the old refs, if any, until we set the new user data.
-    lock(connection.on_publish_complete_refs_lock) do
-        if haskey(connection.on_publish_complete_refs, topic)
-            push!(connection.on_publish_complete_refs[topic], userdata)
-        else
-            connection.on_publish_complete_refs[topic] = [userdata]
-        end
-    end
+#         topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
+#         payload_cur = Ref(aws_byte_cursor_from_c_str(payload))
+#         begin #  GC.@preserve topic_cur payload_cur
+#             # topic_cur, payload_cur, userdata must persist until the on_publish_complete callback is finished
+#             packet_id = aws_mqtt_client_connection_publish(
+#                 connection.ptr,
+#                 topic_cur,
+#                 qos,
+#                 retain,
+#                 payload_cur,
+#                 _C_ON_PUBLISH_COMPLETE[],
+#                 Base.pointer_from_objref(userdata),
+#             )
+
+#             return (Threads.@spawn begin
+#                 GC.@preserve topic_cur payload_cur begin
+#                     result = take!(out_ch)
+#                     delete!(connection.on_publish_complete_refs, id) # we can free the userdata after the callback runs
+#                     if result isa Exception
+#                         throw(result)
+#                     else
+#                         return result
+#                     end
+#                 end
+#             end), packet_id
+#         end
+#     end
+# end
+
+# TODO remove
+# THIS VERSION DOES NOT WORK
+function publish(
+    connection::MQTTConnection,
+    topic::String,
+    payload::String,
+    qos::aws_mqtt_qos,
+    retain::Bool = false;
+    callback::Union{Function,Nothing} = nothing, # FIXME document
+)
+    out_ch = Channel(1)
+    userdata = Ref(
+        _OnPublishCompleteUD(
+            connection.events,
+            (msg) -> begin
+                put!(out_ch, msg)
+                if callback !== nothing
+                    try
+                        callback()
+                    catch ex
+                        @error "on_publish_complete user callback errored" exception = (ex, catch_backtrace())
+                    end
+                end
+            end,
+        ),
+    )
 
     topic_cur = Ref(aws_byte_cursor_from_c_str(topic))
     payload_cur = Ref(aws_byte_cursor_from_c_str(payload))
-    GC.@preserve connection topic_cur payload_cur out_ch begin
-        packet_id = aws_mqtt_client_connection_publish(
-            connection.ptr,
-            topic_cur,
-            qos,
-            retain,
-            payload_cur,
-            _C_ON_PUBLISH_COMPLETE[],
-            Base.pointer_from_objref(userdata),
-        )
-        @debug "publish" packet_id topic payload qos retain
 
-        # Now that we set the new user data we can remove the ref to the old user data, if there was any
-        lock(connection.on_publish_complete_refs_lock) do
-            connection.on_publish_complete_refs[topic] = [userdata]
-        end
+    # topic_cur, payload_cur, userdata must persist until the on_publish_complete callback is finished
+    packet_id = aws_mqtt_client_connection_publish(
+        connection.ptr,
+        topic_cur,
+        qos,
+        retain,
+        payload_cur,
+        _C_ON_PUBLISH_COMPLETE[],
+        Base.pointer_from_objref(userdata),
+    )
 
-        return (@async begin
-            GC.@preserve connection topic_cur payload_cur begin
-                result = take!(out_ch)
-                @debug "publish finished" packet_id result
-                if result isa Exception
-                    throw(result)
-                else
-                    return result
-                end
+    return (Threads.@spawn begin
+        GC.@preserve topic_cur payload_cur userdata begin
+            result = take!(out_ch)
+            if result isa Exception
+                throw(result)
+            else
+                return result
             end
-        end), packet_id
-    end
+        end
+    end), packet_id
 end

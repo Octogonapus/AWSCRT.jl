@@ -304,9 +304,23 @@ Arguments:
 """
 function ClientTLSContext(options::TLSContextOptions)
     tls_ctx_opt = Ref(aws_tls_ctx_options(ntuple(_ -> UInt8(0), 200)))
+    # tls_ctx_opt = Ref(
+    #     aws_tls_ctx_options(
+    #         C_NULL,
+    #         options.min_tls_version,
+    #         aws_tls_cipher_pref(0),
+    #         aws_byte_buf(0, C_NULL, 0, C_NULL),
+    #         C_NULL,
+    #         C_NULL,
+    #         aws_byte_buf(0, C_NULL, 0, C_NULL),
+    #         aws_byte_buf(0, C_NULL, 0, C_NULL),
+    #         0,
+    #         options.verify_peer,
+    #         C_NULL,
+    #         C_NULL,
+    #     ),
+    # )
     GC.@preserve tls_ctx_opt begin
-        tls_ctx_opt_ptr = Base.unsafe_convert(Ptr{aws_tls_ctx_options}, tls_ctx_opt)
-
         # TODO pkcs11
         # TODO pkcs12
         # TODO windows cert store
@@ -314,20 +328,18 @@ function ClientTLSContext(options::TLSContextOptions)
             # mTLS with certificate and private key
             cert = Ref(aws_byte_cursor_from_c_str(options.cert_data))
             key = Ref(aws_byte_cursor_from_c_str(options.pk_data))
-            if aws_tls_ctx_options_init_client_mtls(tls_ctx_opt_ptr, _AWSCRT_ALLOCATOR[], cert, key) != AWS_OP_SUCCESS
+            if aws_tls_ctx_options_init_client_mtls(tls_ctx_opt, _AWSCRT_ALLOCATOR[], cert, key) != AWS_OP_SUCCESS
                 error("Failed to create client TLS context. $(aws_err_string())")
             end
         else
             # no mTLS
-            aws_tls_ctx_options_init_default_client(tls_ctx_opt_ptr, _AWSCRT_ALLOCATOR[])
+            aws_tls_ctx_options_init_default_client(tls_ctx_opt, _AWSCRT_ALLOCATOR[])
         end
-
-        tls_ctx_opt_ptr.minimum_tls_version = options.min_tls_version
 
         try
             if options.ca_dirpath !== nothing || options.ca_filepath !== nothing
                 if aws_tls_ctx_options_override_default_trust_store_from_path(
-                    tls_ctx_opt_ptr,
+                    tls_ctx_opt,
                     options.ca_dirpath === nothing ? C_NULL : options.ca_dirpath,
                     options.ca_filepath === nothing ? C_NULL : options.ca_filepath,
                 ) != AWS_OP_SUCCESS
@@ -337,21 +349,19 @@ function ClientTLSContext(options::TLSContextOptions)
 
             if options.ca_data !== nothing
                 ca = Ref(aws_byte_cursor_from_c_str(options.ca_data))
-                if aws_tls_ctx_options_override_default_trust_store(tls_ctx_opt_ptr, ca) != AWS_OP_SUCCESS
+                if aws_tls_ctx_options_override_default_trust_store(tls_ctx_opt, ca) != AWS_OP_SUCCESS
                     error("Failed to override trust store. $(aws_err_string())")
                 end
             end
 
             if options.alpn_list !== nothing
                 alpn_list_string = join(options.alpn_list, ';')
-                if aws_tls_ctx_options_set_alpn_list(tls_ctx_opt_ptr, alpn_list_string) != AWS_OP_SUCCESS
+                if aws_tls_ctx_options_set_alpn_list(tls_ctx_opt, alpn_list_string) != AWS_OP_SUCCESS
                     error("Failed to set ALPN list. $(aws_err_string())")
                 end
             end
 
-            tls_ctx_opt_ptr.verify_peer = options.verify_peer
-
-            tls_ctx = aws_tls_client_ctx_new(_AWSCRT_ALLOCATOR[], tls_ctx_opt_ptr)
+            tls_ctx = aws_tls_client_ctx_new(_AWSCRT_ALLOCATOR[], tls_ctx_opt)
             if tls_ctx == C_NULL
                 error("Failed to create TLS context. $(aws_err_string())")
             end
@@ -361,7 +371,7 @@ function ClientTLSContext(options::TLSContextOptions)
                 aws_tls_ctx_release(x.ptr)
             end
         catch
-            aws_tls_ctx_options_clean_up(tls_ctx_opt_ptr)
+            aws_tls_ctx_options_clean_up(tls_ctx_opt)
             rethrow()
         end
     end
