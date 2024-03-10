@@ -1116,6 +1116,7 @@ function _c_on_publish_complete(
     userdata::Ptr{Cvoid},
 )
     # This runs in an event loop. Don't wait on anything in here or you will block the event loop.
+    println("_c_on_publish_complete executed $userdata")
 
     result = if error_code != AWS_ERROR_SUCCESS
         ErrorException("Publish failed. $(aws_err_string(error_code))")
