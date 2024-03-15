@@ -179,6 +179,23 @@ end
     @test @test_logs (:error,) match_mode = :any !AWSCRT._do_local_shadow_update!(sf, state) # no update the second time
 end
 
+@testset "_update_local_shadow_from_get!" for doc in ALL_EXAMPLE_SD_1
+    doc_copy = deepcopy(doc)
+    sf = empty_shadow_framework(doc_copy)
+    @test AWSCRT._update_local_shadow_from_get!(
+        sf,
+        json(Dict("state" => Dict("delta" => Dict("foo" => 2)), "version" => 3)),
+    )
+    @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
+end
+
+@testset "_update_local_shadow_from_delta!" for doc in ALL_EXAMPLE_SD_1
+    doc_copy = deepcopy(doc)
+    sf = empty_shadow_framework(doc_copy)
+    @test AWSCRT._update_local_shadow_from_delta!(sf, json(Dict("state" => Dict("foo" => 2), "version" => 3)))
+    @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
+end
+
 @testset "out of order messages, version is respected" for doc in ALL_EXAMPLE_SD_1,
     update_type in [:get_accepted, :delta]
 
