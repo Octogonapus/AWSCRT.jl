@@ -13,7 +13,7 @@ LibAWSCRT = "df7458b6-5204-493f-a0e7-404b4eb72fac"
 [compat]
 AWSCRT_jll = "=0.1.2"
 AWS = "1.78"
-Aqua = "0.8"
+Aqua = "0.8.4"
 CEnum = "0.4"
 CountDownLatches = "2"
 Dates = "1"
