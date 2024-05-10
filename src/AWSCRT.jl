@@ -10,7 +10,7 @@ Note: all the symbols in this package that begin with underscores are private an
 """
 module AWSCRT
 
-using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum, JSON
+using CountDownLatches, JSON, LibAwsCommon, LibAwsIO, LibAwsMqtt
 import Base: lock, unlock
 export lock, unlock
 
