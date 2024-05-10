@@ -3,14 +3,14 @@ Environment variables:
 
   - `AWS_CRT_MEMORY_TRACING`: Set to `0`, `1`, or `2` to enable memory tracing. Default is off. See `aws_mem_trace_level`.
   - `AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK`: Set the number of frames per stack for memory tracing. Default is the AWS library's default.
-  - `AWS_CRT_LOG_LEVEL`: Set to `0` through `6` to enable logging. Default is off. See [`aws_log_level`](https://octogonapus.github.io/LibAWSCRT.jl/dev/#LibAWSCRT.aws_log_level).
+  - `AWS_CRT_LOG_LEVEL`: Set to `0` through `6` to enable logging. Default is off. See [`aws_log_level`](https://juliaservices.github.io/LibAwsCommon.jl/dev/#LibAwsCommon.aws_log_level).
   - `AWS_CRT_LOG_PATH`: Set to the log file path. Must be set if `AWS_CRT_LOG_LEVEL` is set.
 
 Note: all the symbols in this package that begin with underscores are private and are not part of this package's published interface. Please don't use them.
 """
 module AWSCRT
 
-using LibAWSCRT, ForeignCallbacks, CountDownLatches, CEnum, JSON
+using CountDownLatches, JSON, LibAwsCommon, LibAwsIO, LibAwsMqtt
 import Base: lock, unlock
 export lock, unlock
 
@@ -21,7 +21,7 @@ const _C_ON_ANY_MESSAGE_IDS_LOCK = ReentrantLock()
 const _C_ON_ANY_MESSAGE_IDS = IdDict{Any,Any}()
 
 # set during __init__
-const _LIBPTR = Ref{Ptr{Cvoid}}(Ptr{Cvoid}(0))
+const _LIB_COMMON_PTR = Ref{Ptr{Cvoid}}(Ptr{Cvoid}(0))
 const _AWSCRT_ALLOCATOR = Ref{Union{Ptr{aws_allocator},Nothing}}(nothing)
 
 # cfunctions set during __init__
@@ -104,7 +104,7 @@ export publish_current_state
 export wait_until_synced
 
 function __init__()
-    _LIBPTR[] = Libc.Libdl.dlopen(LibAWSCRT.libawscrt)
+    _LIB_COMMON_PTR[] = Libc.Libdl.dlopen(LibAwsCommon.libaws_c_common)
 
     _C_ON_CONNECTION_INTERRUPTED[] =
         @cfunction(_c_on_connection_interrupted, Cvoid, (Ptr{aws_mqtt_client_connection}, Cint, Ptr{Cvoid}))

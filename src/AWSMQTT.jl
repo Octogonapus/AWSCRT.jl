@@ -1138,8 +1138,8 @@ function resubscribe_existing_topics(connection::MQTTConnection)
     out_ch = Channel(1)
     ud = _OnResubcribeCompleteUD(
         connection.events,
-        Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_length),
-        Libc.Libdl.dlsym(_LIBPTR[], :aws_array_list_get_at),
+        Libc.Libdl.dlsym(_LIB_COMMON_PTR[], :aws_array_list_length),
+        Libc.Libdl.dlsym(_LIB_COMMON_PTR[], :aws_array_list_get_at),
         (msg) -> put!(out_ch, msg),
     )
     udp = Base.pointer_from_objref(ud)

@@ -8,7 +8,7 @@ precompile(Tuple{typeof(Base.merge_types), Tuple{Vararg{Symbol}}, Type{var"#s78"
 precompile(Tuple{Core.Compiler.var"#273#274", Any, Any})
 precompile(Tuple{typeof(Base.uv_asynccb), Ptr{Nothing}})
 precompile(Tuple{typeof(AWSCRT.__init__)})
-precompile(Tuple{typeof(AWSCRT.on_connection_complete), Ptr{LibAWSCRT.aws_mqtt_client_connection}, Int32, Int32, UInt8, Ptr{Nothing}})
+precompile(Tuple{typeof(AWSCRT.on_connection_complete), Ptr{LibAwsCommon.aws_mqtt_client_connection}, Int32, Int32, UInt8, Ptr{Nothing}})
 
 # including the below precompiles causes the segfault
 precompile(Tuple{typeof(Foo.start)})

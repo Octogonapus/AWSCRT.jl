@@ -13,7 +13,7 @@ end
 
 ENV["JULIA_DEBUG"] = "AWSCRT"
 
-using Test, AWSCRT, LibAWSCRT, JSON, CountDownLatches, Random, Documenter, Aqua, Dates, AWS
+using Test, AWSCRT, JSON, CountDownLatches, Random, Documenter, Aqua, Dates, AWS, LibAwsMqtt
 @service DynamoDB
 
 include("util.jl")
