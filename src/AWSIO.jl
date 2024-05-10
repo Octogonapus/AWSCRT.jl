@@ -303,23 +303,22 @@ Arguments:
   - `options (TLSContextOptions)`: Configuration options.
 """
 function ClientTLSContext(options::TLSContextOptions)
-    tls_ctx_opt = Ref(aws_tls_ctx_options(ntuple(_ -> UInt8(0), 200)))
-    # tls_ctx_opt = Ref(
-    #     aws_tls_ctx_options(
-    #         C_NULL,
-    #         options.min_tls_version,
-    #         aws_tls_cipher_pref(0),
-    #         aws_byte_buf(0, C_NULL, 0, C_NULL),
-    #         C_NULL,
-    #         C_NULL,
-    #         aws_byte_buf(0, C_NULL, 0, C_NULL),
-    #         aws_byte_buf(0, C_NULL, 0, C_NULL),
-    #         0,
-    #         options.verify_peer,
-    #         C_NULL,
-    #         C_NULL,
-    #     ),
-    # )
+    tls_ctx_opt = Ref(
+        aws_tls_ctx_options(
+            C_NULL,
+            options.min_tls_version,
+            aws_tls_cipher_pref(0),
+            aws_byte_buf(0, C_NULL, 0, C_NULL),
+            C_NULL,
+            C_NULL,
+            aws_byte_buf(0, C_NULL, 0, C_NULL),
+            aws_byte_buf(0, C_NULL, 0, C_NULL),
+            0,
+            options.verify_peer,
+            C_NULL,
+            C_NULL,
+        ),
+    )
     GC.@preserve tls_ctx_opt begin
         # TODO pkcs11
         # TODO pkcs12
