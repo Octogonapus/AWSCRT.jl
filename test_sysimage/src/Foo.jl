@@ -1,7 +1,6 @@
 module Foo
 
 using AWSCRT
-using AWSCRT.LibAWSCRT
 using Random
 using Test
 
