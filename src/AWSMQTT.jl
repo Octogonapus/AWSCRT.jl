@@ -218,7 +218,7 @@ function _c_on_connection_interrupted(
         return
     end
 
-    data = Base.unsafe_pointer_to_objref(userdata)::_OnConnectionResumedUserData
+    data = Base.unsafe_pointer_to_objref(userdata)::_OnConnectionInterruptedUserData
     try
         put!(data.ch, _OnConnectionInterruptedEvent(data.callback, error_code))
     catch ex
