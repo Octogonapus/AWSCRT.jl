@@ -418,7 +418,7 @@ function connect(
 
     # this ud must persist until the connection is closed
     on_connection_resumed_ud, on_connection_resumed_udp = if on_connection_resumed !== nothing
-        ud = _OnConnectionInterruptedUserData(connection.events, on_connection_resumed)
+        ud = _OnConnectionResumedUserData(connection.events, on_connection_resumed)
         udp = Base.pointer_from_objref(ud)
         lock(_C_IDS_LOCK) do
             # TODO we leak these refs, they are never freed
