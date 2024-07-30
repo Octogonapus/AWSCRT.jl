@@ -196,14 +196,16 @@ end
 
 struct _OnConnectionInterruptedEvent
     callback::Function
+    conn::MQTTConnection
     error_code::Int
 end
 
-_dispatch_event(event::_OnConnectionInterruptedEvent) = Base.invokelatest(event.callback, event.error_code)
+_dispatch_event(event::_OnConnectionInterruptedEvent) = Base.invokelatest(event.callback, event.conn, event.error_code)
 
 mutable struct _OnConnectionInterruptedUserData # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
     callback::Function
+    conn::MQTTConnection
 end
 
 function _c_on_connection_interrupted(
@@ -232,16 +234,18 @@ end
 
 struct _OnConnectionResumedEvent
     callback::Function
+    conn::MQTTConnection
     return_code::aws_mqtt_connect_return_code
     session_present::Bool
 end
 
 _dispatch_event(event::_OnConnectionResumedEvent) =
-    Base.invokelatest(event.callback, event.return_code, event.session_present)
+    Base.invokelatest(event.callback, event.conn, event.return_code, event.session_present)
 
 mutable struct _OnConnectionResumedUserData # mutable so it is heap allocated and has a stable address
     ch::Channel{Any}
     callback::Function
+    conn::MQTTConnection
 end
 
 function _c_on_connection_resumed(
@@ -404,7 +408,7 @@ function connect(
 
     # this ud must persist until the connection is closed
     on_connection_interrupted_ud, on_connection_interrupted_udp = if on_connection_interrupted !== nothing
-        ud = _OnConnectionInterruptedUserData(connection.events, on_connection_interrupted)
+        ud = _OnConnectionInterruptedUserData(connection.events, on_connection_interrupted, connection)
         udp = Base.pointer_from_objref(ud)
         lock(_C_IDS_LOCK) do
             # TODO we leak these refs, they are never freed
@@ -418,7 +422,7 @@ function connect(
 
     # this ud must persist until the connection is closed
     on_connection_resumed_ud, on_connection_resumed_udp = if on_connection_resumed !== nothing
-        ud = _OnConnectionResumedUserData(connection.events, on_connection_resumed)
+        ud = _OnConnectionResumedUserData(connection.events, on_connection_resumed, connection)
         udp = Base.pointer_from_objref(ud)
         lock(_C_IDS_LOCK) do
             # TODO we leak these refs, they are never freed
