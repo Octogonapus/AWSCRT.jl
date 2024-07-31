@@ -1,6 +1,6 @@
 name = "AWSCRT"
 uuid = "df31ea59-17a4-4ebd-9d69-4f45266dc2c7"
-version = "0.3.3"
+version = "0.4.0"
 
 [deps]
 CountDownLatches = "621fb831-fdad-4fff-93ac-1af7b7ed19e3"
