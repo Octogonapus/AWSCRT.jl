@@ -22,6 +22,11 @@ end)
             Aqua.test_all(AWSCRT, ambiguities = false)
             Aqua.test_ambiguities(AWSCRT)
         end
+        @testset "interrupt_connection.jl" begin
+            # running this in parallel will kill the connections used by other tests so don't do that
+            @info "Starting interrupt_connection.jl"
+            include("interrupt_connection.jl")
+        end
     end
     @testset "mqtt_test.jl" begin
         @info "Starting mqtt_test.jl"
