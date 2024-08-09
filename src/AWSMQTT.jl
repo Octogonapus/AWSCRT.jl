@@ -222,7 +222,7 @@ function _c_on_connection_interrupted(
 
     data = Base.unsafe_pointer_to_objref(userdata)::_OnConnectionInterruptedUserData
     try
-        put!(data.ch, _OnConnectionInterruptedEvent(data.callback, error_code))
+        put!(data.ch, _OnConnectionInterruptedEvent(data.callback, data.conn, error_code))
     catch ex
         if ex isa InvalidStateException && ex.state == :closed
         else
@@ -265,7 +265,12 @@ function _c_on_connection_resumed(
     try
         put!(
             data.ch,
-            _OnConnectionResumedEvent(data.callback, aws_mqtt_connect_return_code(return_code), session_present != 0),
+            _OnConnectionResumedEvent(
+                data.callback,
+                data.conn,
+                aws_mqtt_connect_return_code(return_code),
+                session_present != 0,
+            ),
         )
     catch ex
         if ex isa InvalidStateException && ex.state == :closed
