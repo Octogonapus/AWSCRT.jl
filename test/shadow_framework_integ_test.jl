@@ -193,8 +193,9 @@ shadow_types = parallel ? [:named] : [:named, :unnamed]
         try
             fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1]) # ensure the shadow is deleted just in case of a prior broken test
 
-            fetch(subscribe(sf)[1]) # subscribe and trigger the initial update, which will fail because there is no shadow
-            wait_until_synced(sf)
+            wait_until_synced(sf) do
+                fetch(subscribe(sf)[1]) # subscribe and trigger the initial update, which will fail because there is no shadow
+            end
             sleep(3) # we need to make sure the local shadow won't get modified. no better way than to just wait a bit in case something modifies it.
             @test collect(keys(doc)) == ["version", "foo"] # we should have the version and the initial foo key we set
             @test doc["foo"] == 1 # should be unchanged from our initial state
@@ -241,8 +242,9 @@ shadow_types = parallel ? [:named] : [:named, :unnamed]
 
             @info "subscribing in band shadow"
             values_post_update = []
-            fetch(subscribe(sf)[1]) # subscribe and trigger the initial update
-            wait_until_synced(sf)
+            wait_until_synced(sf) do
+                fetch(subscribe(sf)[1]) # subscribe and trigger the initial update
+            end
             wait_for(() -> length(values_post_update) >= 1) # wait for the update to finish since it requires multiple messages
             # The initial update should have pulled in that desired state
             @test doc["foo"] == 2
@@ -425,10 +427,11 @@ end
 
         try
             @info "subscribing"
-            fetch(subscribe(sf)[1])
             # wait for the first publish to finish, otherwise we will race it with our next update, which could arrive
             # first and break this test
-            wait_until_synced(sf)
+            wait_until_synced(sf) do
+                fetch(subscribe(sf)[1])
+            end
 
             # publish a /update. this should be accepted. the local shadow should be updated.
             # an /update should be published with the new reported state.
@@ -516,10 +519,11 @@ end
 
         try
             @info "subscribing"
-            fetch(subscribe(sf)[1])
             # wait for the first publish to finish, otherwise we will race it with our next update, which could arrive
             # first and break this test
-            wait_until_synced(sf)
+            wait_until_synced(sf) do
+                fetch(subscribe(sf)[1])
+            end
 
             # publish an /update which adds bar=1. this should be rejected because bar is not present in the struct.
             # the local shadow should not be updated. an /update should not be published.
