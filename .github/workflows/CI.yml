@@ -103,6 +103,8 @@ jobs:
       - uses: julia-actions/cache@v1
 
       - uses: julia-actions/julia-downgrade-compat@v1
+        with:
+          skip: Dates, Random, Test
 
       - uses: julia-actions/julia-buildpkg@v1
 
