@@ -137,6 +137,10 @@ Arguments:
   - `id (Int)`: A unique ID which disambiguates log messages from multiple shadow frameworks.
 
 See also [`ShadowDocumentPropertyUpdateCallback`](@ref), [`ShadowDocumentPreUpdateCallback`](@ref), [`ShadowDocumentPostUpdateCallback`](@ref), [`MQTTConnection`](@ref).
+
+    !!! note "Limitations"
+        Removing properties by setting their desired value to `null` is not currently supported. AWS IoT will remove
+        that `null` property from the desired state, but the property will remain in the reported state.
 """
 function ShadowFramework(
     connection::MQTTConnection,

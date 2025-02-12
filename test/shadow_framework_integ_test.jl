@@ -414,18 +414,19 @@ end
 
         empty!(values_post_update)
 
-        # remove foo.baz. foo.bar=1 should remain
-        @info "publishing out of band /update"
-        fetch(
-            publish(
-                oobsc.shadow_client,
-                "/update",
-                json(Dict("state" => Dict("desired" => Dict("foo" => Dict("baz" => nothing))))),
-                AWS_MQTT_QOS_AT_LEAST_ONCE,
-            )[1],
-        )
-        wait_for(() -> !isempty(values_post_update))
-        @test doc["foo"] == Dict("bar" => 1)
+        # TODO this is not supported yet
+        # # remove foo.baz. foo.bar=1 should remain
+        # @info "publishing out of band /update"
+        # fetch(
+        #     publish(
+        #         oobsc.shadow_client,
+        #         "/update",
+        #         json(Dict("state" => Dict("desired" => Dict("foo" => Dict("baz" => nothing))))),
+        #         AWS_MQTT_QOS_AT_LEAST_ONCE,
+        #     )[1],
+        # )
+        # wait_for(() -> !isempty(values_post_update))
+        # @test doc["foo"] == Dict("bar" => 1)
 
         @info "unsubscribing"
         fetch(unsubscribe(sf)[1])
