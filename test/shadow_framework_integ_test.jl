@@ -368,7 +368,7 @@ end
 @testset "updating a field in a nested dict causes only that field to get updated" begin
     connection = new_mqtt_connection()
     shadow_name = random_shadow_name()
-    doc = Dict("foo" => Dict("bar" => 1))
+    doc = Dict{String,Any}("foo" => Dict("bar" => 1))
 
     values_foo = []
     foo_cb = x -> push!(values_foo, x)
@@ -493,7 +493,7 @@ end
         end
 
         # our local copy should get updated even though there is no delta state
-        @test doc == Dict("foo" => 2)
+        @test doc == Dict("foo" => 2, "version" => 2)
 
         @info "unsubscribing"
         fetch(unsubscribe(sf)[1])
