@@ -1,28 +1,12 @@
-mutable struct ExampleShadowDocument <: Comparable
-    foo::Int
-    bar::String
-    version::Int
-end
-
-mutable struct BadShadowDocWithoutVersion
-    foo::Int
-    bar::String
-end
-
-struct ImmutableShadowDocWithVersion
-    version::Int
-end
-
-const EXAMPLE_SD_1_DICT = Dict("foo" => 1, "bar" => "a", "version" => 2)
-const EXAMPLE_SD_1_STRUCT = ExampleShadowDocument(1, "a", 2)
-const ALL_EXAMPLE_SD_1 = [EXAMPLE_SD_1_DICT, EXAMPLE_SD_1_STRUCT]
-const EXAMPLE_UPDATE_1_STATE = Dict("foo" => 23849, "bar" => "dmwofsh")
+EXAMPLE_SD_1_DICT = Dict("foo" => 1, "bar" => "a", "version" => 2)
+EXAMPLE_UPDATE_1_STATE = Dict("foo" => 23849, "bar" => "dmwofsh")
 
 function empty_shadow_framework(
     shadow_document;
     shadow_document_property_callbacks = Dict{String,Function}(),
     shadow_document_pre_update_callback = (v) -> nothing,
     shadow_document_post_update_callback = (v) -> nothing,
+    shadow_document_property_pre_update_funcs = Dict{String,Function}(),
 )
     return ShadowFramework(
         1,
@@ -32,6 +16,7 @@ function empty_shadow_framework(
         shadow_document_property_callbacks,
         shadow_document_pre_update_callback,
         shadow_document_post_update_callback,
+        shadow_document_property_pre_update_funcs,
     )
 end
 
@@ -45,14 +30,6 @@ end
     d = Dict()
     empty_shadow_framework(d)
     @test d["version"] == 1
-end
-
-@testset "create ShadowFramework with struct without version number" begin
-    @test_throws ErrorException empty_shadow_framework(BadShadowDocWithoutVersion(1, ""))
-end
-
-@testset "create ShadowFramework with immutable struct" begin
-    @test_throws ErrorException empty_shadow_framework(ImmutableShadowDocWithVersion(1))
 end
 
 @testset "_sync_version!" begin
@@ -74,37 +51,26 @@ end
     @test !AWSCRT._version_allows_update(d, 0)
     @test AWSCRT._version_allows_update(d, 1)
     @test AWSCRT._version_allows_update(d, 2)
-
-    doc = ExampleShadowDocument(0, "", 1)
-    @test !AWSCRT._version_allows_update(doc, 0)
-    @test AWSCRT._version_allows_update(doc, 1)
-    @test AWSCRT._version_allows_update(doc, 2)
 end
 
 @testset "_update_shadow_property!" begin
     d = Dict()
     sf = empty_shadow_framework(d)
-    @test AWSCRT._update_shadow_property!(sf, "foo", 1)
-    @test !AWSCRT._update_shadow_property!(sf, "foo", 1) # no update now that it's set
-    @test AWSCRT._update_shadow_property!(sf, "bar", "a")
-    @test AWSCRT._update_shadow_property!(sf, "baz", "b") # new properties can be introduced
+    @test AWSCRT._update_shadow_property!(sf, d, "foo", 1)
+    @test !AWSCRT._update_shadow_property!(sf, d, "foo", 1) # no update now that it's set
+    @test AWSCRT._update_shadow_property!(sf, d, "bar", "a")
+    @test AWSCRT._update_shadow_property!(sf, d, "baz", "b") # new properties can be introduced
     @test d == Dict("foo" => 1, "bar" => "a", "baz" => "b", "version" => 1)
-
-    doc = ExampleShadowDocument(0, "", 1)
-    sf = empty_shadow_framework(doc)
-    @test AWSCRT._update_shadow_property!(sf, "foo", 1)
-    @test !AWSCRT._update_shadow_property!(sf, "foo", 1) # no update now that it's set
-    @test AWSCRT._update_shadow_property!(sf, "bar", "a")
-    @test @test_logs (:error,) !AWSCRT._update_shadow_property!(sf, "baz", "b") # new properties fail with structs. returns false because there is no update
-    @test doc == ExampleShadowDocument(1, "a", 1)
 end
 
-@testset "_get_shadow_property_pairs" for doc in ALL_EXAMPLE_SD_1
+@testset "_get_shadow_property_pairs" begin
+    doc = EXAMPLE_SD_1_DICT
     expected = ["foo" => 1, "bar" => "a"]
     @test sort_pairs(expected) == sort_pairs(AWSCRT._get_shadow_property_pairs(doc))
 end
 
-@testset "_create_reported_state_payload" for doc in ALL_EXAMPLE_SD_1
+@testset "_create_reported_state_payload" begin
+    doc = EXAMPLE_SD_1_DICT
     sf = empty_shadow_framework(doc)
     expected = Dict("state" => Dict("reported" => Dict("foo" => 1, "bar" => "a")), "version" => 2)
     @test json(expected) == AWSCRT._create_reported_state_payload(sf)
@@ -113,7 +79,8 @@ end
     @test json(expected) == AWSCRT._create_reported_state_payload(sf; include_version = false)
 end
 
-@testset "_fire_callback (happy path)" for doc in ALL_EXAMPLE_SD_1
+@testset "_fire_callback (happy path)" begin
+    doc = EXAMPLE_SD_1_DICT
     values = []
     sf = empty_shadow_framework(
         deepcopy(doc);
@@ -123,7 +90,8 @@ end
     @test values == [0]
 end
 
-@testset "_fire_callback (callback throws)" for doc in ALL_EXAMPLE_SD_1
+@testset "_fire_callback (callback throws)" begin
+    doc = EXAMPLE_SD_1_DICT
     values = []
     sf = empty_shadow_framework(
         doc;
@@ -133,7 +101,8 @@ end
     @test isempty(values)
 end
 
-@testset "_fire_callback (no matching callback)" for doc in ALL_EXAMPLE_SD_1
+@testset "_fire_callback (no matching callback)" begin
+    doc = EXAMPLE_SD_1_DICT
     values = []
     sf = empty_shadow_framework(
         doc;
@@ -143,12 +112,14 @@ end
     @test isempty(values)
 end
 
-@testset "_fire_callback (no callbacks)" for doc in ALL_EXAMPLE_SD_1
+@testset "_fire_callback (no callbacks)" begin
+    doc = EXAMPLE_SD_1_DICT
     sf = empty_shadow_framework(doc)
     AWSCRT._fire_callback(sf, "bar", 0)
 end
 
-@testset "_do_local_shadow_update!" for doc in ALL_EXAMPLE_SD_1
+@testset "_do_local_shadow_update!" begin
+    doc = EXAMPLE_SD_1_DICT
     values = []
     doc_copy = deepcopy(doc)
     sf = empty_shadow_framework(
@@ -179,7 +150,58 @@ end
     @test @test_logs (:error,) match_mode = :any !AWSCRT._do_local_shadow_update!(sf, state) # no update the second time
 end
 
-@testset "_update_local_shadow_from_get!" for doc in ALL_EXAMPLE_SD_1
+@testset "use pre-update function instead of default behavior" begin
+    @testset "regular update" begin
+        doc = Dict("a" => 1)
+        sf = empty_shadow_framework(
+            doc,
+            shadow_document_property_pre_update_funcs = Dict("a" => (doc, key, value) -> begin
+                    if key != "a"
+                        error("bad key $key")
+                    end
+                    doc[key] = 3
+                    return true
+                end),
+        )
+        @test AWSCRT._do_local_shadow_update!(sf, Dict("a" => 2))
+        @test doc == Dict("a" => 3, "version" => 1)
+    end
+
+    @testset "no update" begin
+        doc = Dict("a" => 1)
+        sf = empty_shadow_framework(
+            doc,
+            shadow_document_property_pre_update_funcs = Dict("a" => (doc, key, value) -> begin
+                    if key != "a"
+                        error("bad key $key")
+                    end
+                    doc[key] = 3
+                    return false
+                end),
+        )
+        @test !AWSCRT._do_local_shadow_update!(sf, Dict("a" => 2))
+        @test doc == Dict("a" => 3, "version" => 1)
+    end
+
+    @testset "nested key" begin
+        doc = Dict{String,Any}("a" => Dict("b" => 1, "c" => 1))
+        sf = empty_shadow_framework(
+            doc,
+            shadow_document_property_pre_update_funcs = Dict("b" => (doc, key, value) -> begin
+                    if key != "b"
+                        error("bad key $key")
+                    end
+                    doc[key] = 3
+                    return true
+                end),
+        )
+        @test AWSCRT._do_local_shadow_update!(sf, Dict("a" => Dict("b" => 2)))
+        @test doc == Dict("a" => Dict("b" => 3, "c" => 1), "version" => 1)
+    end
+end
+
+@testset "_update_local_shadow_from_get!" begin
+    doc = EXAMPLE_SD_1_DICT
     doc_copy = deepcopy(doc)
     sf = empty_shadow_framework(doc_copy)
     @test AWSCRT._update_local_shadow_from_get!(
@@ -189,15 +211,16 @@ end
     @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
 end
 
-@testset "_update_local_shadow_from_delta!" for doc in ALL_EXAMPLE_SD_1
+@testset "_update_local_shadow_from_delta!" begin
+    doc = EXAMPLE_SD_1_DICT
     doc_copy = deepcopy(doc)
     sf = empty_shadow_framework(doc_copy)
     @test AWSCRT._update_local_shadow_from_delta!(sf, json(Dict("state" => Dict("foo" => 2), "version" => 3)))
     @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
 end
 
-@testset "out of order messages, version is respected" for doc in ALL_EXAMPLE_SD_1,
-    update_type in [:get_accepted, :delta]
+@testset "out of order messages, version is respected" for update_type in [:get_accepted, :delta]
+    doc = EXAMPLE_SD_1_DICT
 
     update_func = if update_type == :get_accepted
         AWSCRT._update_local_shadow_from_get!

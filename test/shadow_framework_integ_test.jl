@@ -49,11 +49,6 @@ function maybe_get(d, keys...)
     end
 end
 
-mutable struct ShadowDocMissingProperty
-    foo::Int
-    version::Int
-end
-
 @testset "unsubscribe" begin
     connection = new_mqtt_connection()
     shadow_name = random_shadow_name()
@@ -370,6 +365,145 @@ end
     end
 end
 
+@testset "updating a field in a nested dict causes only that field to get updated" begin
+    connection = new_mqtt_connection()
+    shadow_name = random_shadow_name()
+    doc = Dict("foo" => Dict("bar" => 1))
+
+    values_foo = []
+    foo_cb = x -> push!(values_foo, x)
+
+    values_post_update = []
+    post_update_cb = x -> begin
+        push!(values_post_update, x)
+    end
+
+    sf = ShadowFramework(
+        connection,
+        THING1_NAME,
+        shadow_name,
+        doc;
+        shadow_document_post_update_callback = post_update_cb,
+        shadow_document_property_callbacks = Dict{String,Function}("foo" => foo_cb),
+    )
+    sc = shadow_client(sf)
+
+    oobc = new_mqtt_connection()
+    oobsc = OOBShadowClient(oobc, THING1_NAME, shadow_name)
+
+    try
+        @info "subscribing"
+        # wait for the first publish to finish, otherwise we will race it with our next update, which could arrive
+        # first and break this test
+        wait_until_synced(sf) do
+            fetch(subscribe(sf)[1])
+        end
+
+        # add foo.baz=2. foo.bar=1 should remain
+        @info "publishing out of band /update"
+        fetch(
+            publish(
+                oobsc.shadow_client,
+                "/update",
+                json(Dict("state" => Dict("desired" => Dict("foo" => Dict("baz" => 2))))),
+                AWS_MQTT_QOS_AT_LEAST_ONCE,
+            )[1],
+        )
+        wait_for(() -> !isempty(values_post_update))
+        @test doc["foo"] == Dict("bar" => 1, "baz" => 2)
+
+        empty!(values_post_update)
+
+        # remove foo.baz. foo.bar=1 should remain
+        @info "publishing out of band /update"
+        fetch(
+            publish(
+                oobsc.shadow_client,
+                "/update",
+                json(Dict("state" => Dict("desired" => Dict("foo" => Dict("baz" => nothing))))),
+                AWS_MQTT_QOS_AT_LEAST_ONCE,
+            )[1],
+        )
+        wait_for(() -> !isempty(values_post_update))
+        @test doc["foo"] == Dict("bar" => 1)
+
+        @info "unsubscribing"
+        fetch(unsubscribe(sf)[1])
+        @info "done unsubscribing"
+        fetch(unsubscribe(oobsc.shadow_client)[1])
+    finally
+        fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1])
+    end
+end
+
+@testset "the initial sync must sync the local shadow document even if there is no delta state" begin
+    connection = new_mqtt_connection()
+    shadow_name = random_shadow_name()
+    doc = Dict("foo" => 1)
+
+    values_foo = []
+    foo_cb = x -> push!(values_foo, x)
+
+    values_post_update = []
+    post_update_cb = x -> begin
+        push!(values_post_update, x)
+    end
+
+    sf = ShadowFramework(
+        connection,
+        THING1_NAME,
+        shadow_name,
+        doc;
+        shadow_document_post_update_callback = post_update_cb,
+        shadow_document_property_callbacks = Dict{String,Function}("foo" => foo_cb),
+    )
+    sc = shadow_client(sf)
+
+    oobc = new_mqtt_connection()
+    oobsc = OOBShadowClient(oobc, THING1_NAME, shadow_name)
+
+    update_msgs = []
+    task, id = subscribe(
+        oobsc.shadow_client,
+        "/update",
+        AWS_MQTT_QOS_AT_LEAST_ONCE,
+        (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) ->
+            push!(update_msgs, (; topic, payload, dup, qos, retain)),
+    )
+    fetch(task)
+
+    try
+        # if we have reported state that's out of sync with our local shadow doc, and no delta state
+        @info "publishing out of band /update"
+        fetch(
+            publish(
+                oobsc.shadow_client,
+                "/update",
+                json(Dict("state" => Dict("reported" => Dict("foo" => 2), "desired" => Dict("foo" => 2)))),
+                AWS_MQTT_QOS_AT_LEAST_ONCE,
+            )[1],
+        )
+        wait_for(() -> !isempty(update_msgs))
+
+        @info "subscribing"
+        # wait for the first publish to finish, otherwise we will race it with our next update, which could arrive
+        # first and break this test
+        wait_until_synced(sf) do
+            fetch(subscribe(sf)[1])
+        end
+
+        # our local copy should get updated even though there is no delta state
+        @test doc == Dict("foo" => 2)
+
+        @info "unsubscribing"
+        fetch(unsubscribe(sf)[1])
+        @info "done unsubscribing"
+        fetch(unsubscribe(oobsc.shadow_client)[1])
+    finally
+        fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1])
+    end
+end
+
 @testset "updates are published only if the reported state changed" begin
     @testset "happy path" begin
         connection = new_mqtt_connection()
@@ -463,10 +597,9 @@ end
     end
 
     @testset "desired state that can't be reconciled with the local shadow doesn't cause excessive publishing" begin
-        @warn "Missing property errors are expected in this test"
         connection = new_mqtt_connection()
         shadow_name = random_shadow_name()
-        doc = ShadowDocMissingProperty(1, 0)
+        doc = Dict("foo" => rand())
 
         values_foo = []
         foo_cb = x -> push!(values_foo, x)
@@ -488,7 +621,11 @@ end
             doc;
             shadow_document_pre_update_callback = pre_update_cb,
             shadow_document_post_update_callback = post_update_cb,
-            shadow_document_property_callbacks = Dict{String,Function}("foo" => foo_cb),
+            shadow_document_property_callbacks = Dict("foo" => foo_cb),
+            shadow_document_property_pre_update_funcs = Dict("foo" => (doc, k, v) -> begin
+                doc[k] = rand()
+                return false # pretend there was no update to cause a permanent different
+            end),
         )
         sc = shadow_client(sf)
 
@@ -525,15 +662,13 @@ end
                 fetch(subscribe(sf)[1])
             end
 
-            # publish an /update which adds bar=1. this should be rejected because bar is not present in the struct.
-            # the local shadow should not be updated. an /update should not be published.
+            # publish an /update which wants foo=1. the local shadow should not be updated. an /update should not be published.
             @info "publishing out of band /update"
-            @info "the following shadow property error is expected"
             fetch(
                 publish(
                     oobsc.shadow_client,
                     "/update",
-                    json(Dict("state" => Dict("desired" => Dict("bar" => 1)))),
+                    json(Dict("state" => Dict("desired" => Dict("foo" => 1)))),
                     AWS_MQTT_QOS_AT_LEAST_ONCE,
                 )[1],
             )
@@ -542,22 +677,21 @@ end
             @test length(update_msgs) == 2
             @show update_msgs
             payloads = [JSON.parse(it.payload) for it in update_msgs]
-            @test any(it -> maybe_get(it, "state", "reported", "foo") == 1, payloads) # from the initial update since the shadow doc didn't exist
-            @test any(it -> maybe_get(it, "state", "desired", "bar") == 1, payloads) # from our desired state update above
-            # there should not be any other update because the bar update should not have been accepted
+            @test any(it -> maybe_get(it, "state", "reported", "foo") != 1, payloads) # from the initial update since the shadow doc didn't exist
+            @test any(it -> maybe_get(it, "state", "desired", "foo") == 1, payloads) # from our desired state update above
+            # there should not be any other update because the foo update should not have been accepted
 
             update_msgs = []
 
-            # publish an /update which changes foo=2 (with bar=1 still set). this should be accepted.
+            # publish an /update which adds bar=2. this should be accepted.
             # the local shadow should be updated. an /update should be published. the broker will respond with another
             # /update/delta which should be ignored.
             @info "publishing second out of band /update"
-            @info "the following shadow property error is expected"
             fetch(
                 publish(
                     oobsc.shadow_client,
                     "/update",
-                    json(Dict("state" => Dict("desired" => Dict("foo" => 2)))),
+                    json(Dict("state" => Dict("desired" => Dict("bar" => 2)))),
                     AWS_MQTT_QOS_AT_LEAST_ONCE,
                 )[1],
             )
@@ -566,9 +700,8 @@ end
             @test length(update_msgs) == 2
             @show update_msgs
             payloads = [JSON.parse(it.payload) for it in update_msgs]
-            @test any(it -> maybe_get(it, "state", "desired", "foo") == 2, payloads) # from our desired state update above
-            @test any(it -> maybe_get(it, "state", "reported", "foo") == 2, payloads) # the response to our update
-            # there should not be any other update because the bar update should not have been accepted
+            @test any(it -> maybe_get(it, "state", "desired", "bar") == 2, payloads) # from our desired state update above
+            @test any(it -> maybe_get(it, "state", "reported", "bar") == 2, payloads) # the response to our update
 
             @info "unsubscribing"
             fetch(unsubscribe(sf)[1])
