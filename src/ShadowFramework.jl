@@ -143,13 +143,13 @@ function ShadowFramework(
     thing_name::String,
     shadow_name::Union{String,Nothing},
     shadow_document::AbstractDict;
-    shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback} = Dict{
+    shadow_document_property_callbacks::Dict{String,<:ShadowDocumentPropertyUpdateCallback} = Dict{
         String,
         ShadowDocumentPropertyUpdateCallback,
     }(),
     shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback = v -> nothing,
     shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback = v -> nothing,
-    shadow_document_property_pre_update_funcs::Dict{String,ShadowDocumentPropertyPreUpdateFunction} = Dict{
+    shadow_document_property_pre_update_funcs::Dict{String,<:ShadowDocumentPropertyPreUpdateFunction} = Dict{
         String,
         ShadowDocumentPropertyPreUpdateFunction,
     }(),
