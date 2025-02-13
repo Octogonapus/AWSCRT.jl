@@ -494,7 +494,12 @@ end
         end
 
         # our local copy should get updated even though there is no delta state
-        @test doc == Dict("foo" => 2, "version" => 2)
+        try
+            wait_for(() -> doc == Dict("foo" => 2, "version" => 2))
+        catch
+            @show doc
+            rethrow()
+        end
 
         @info "unsubscribing"
         fetch(unsubscribe(sf)[1])
