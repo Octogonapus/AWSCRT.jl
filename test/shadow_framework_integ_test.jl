@@ -716,7 +716,7 @@ end
     @testset "the pre-update function can be used for the parents of nested properties" begin
         connection = new_mqtt_connection()
         shadow_name = random_shadow_name()
-        doc = Dict("foo" => Dict("bar" => 1))
+        doc = Dict{String,Any}("foo" => Dict("bar" => 1))
         bar_latch = CountDownLatch(1)
 
         sf = ShadowFramework(
