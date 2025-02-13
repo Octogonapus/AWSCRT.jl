@@ -96,6 +96,7 @@ export OnShadowMessage
 
 include("ShadowFramework.jl")
 export ShadowFramework
+export ShadowDocumentPropertyPreUpdateFunction
 export ShadowDocumentPropertyUpdateCallback
 export ShadowDocumentPreUpdateCallback
 export ShadowDocumentPostUpdateCallback

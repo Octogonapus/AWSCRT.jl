@@ -1,4 +1,25 @@
 """
+    shadow_document_property_pre_update_function(shadow_document::AbstractDict, key::String, value)::Bool
+
+A function invoked when updating a property in the shadow document.
+This allows you to replace the update behavior in this package if you want to implement custom update behavior for
+a given property.
+The parent [`ShadowFramework`](@ref) will be locked when this function is invoked. The lock is reentrant.
+
+    !!! warning "Warning"
+        This function may only update the given `key`. This function cannot modify other properties in the `shadow_document`.
+
+Arguments:
+
+  - `shadow_document (AbstractDict)`: The shadow document being updated.
+  - `key (String)`: The key in the `shadow_document` for the value being updated.
+  - `value (Any)`: The new value for the `key`.
+
+Returns a `Bool` indicating whether an update was done.
+"""
+const ShadowDocumentPropertyPreUpdateFunction = Function
+
+"""
     shadow_document_property_update_callback(value)
 
 A callback invoked immediately after a property in the shadow document is updated.
@@ -6,7 +27,7 @@ The parent [`ShadowFramework`](@ref) will be locked when this callback is invoke
 
 Arguments:
 
-  - `value (Any)`: The value of the shadow property that was just set in the shadow document.
+  - `value (Any)`: The new value of the property in the shadow document.
 """
 const ShadowDocumentPropertyUpdateCallback = Function
 
@@ -23,7 +44,7 @@ Arguments:
 const ShadowDocumentPreUpdateCallback = Function
 
 """
-    shadow_document_post_update_callback(shadow_document::T)
+    shadow_document_post_update_callback(shadow_document::AbstractDict)
 
 A callback invoked after the shadow document is updated.
 The parent [`ShadowFramework`](@ref) will not be locked when this callback is invoked.
@@ -31,41 +52,36 @@ This is a good place to persist the shadow document to disk.
 
 Arguments:
 
-  - `shadow_document (T)`: The updated shadow document.
+  - `shadow_document (AbstractDict)`: The updated shadow document.
 """
 const ShadowDocumentPostUpdateCallback = Function
 
-mutable struct ShadowFramework{T}
+mutable struct ShadowFramework
     const _id::Int
     const _shadow_document_lock::ReentrantLock
     const _shadow_client::Union{ShadowClient,Nothing} # set to nothing in unit tests
-    const _shadow_document::T
+    const _shadow_document::AbstractDict
     const _shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback}
     const _shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback
     const _shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback
+    const _shadow_document_property_pre_update_funcs::Dict{String,ShadowDocumentPropertyPreUpdateFunction}
     _sync_latch::CountDownLatch
 
     function ShadowFramework(
         id::Int,
         shadow_document_lock::ReentrantLock,
         shadow_client::Union{ShadowClient,Nothing},
-        shadow_document::T,
-        shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback},
+        shadow_document::AbstractDict,
+        shadow_document_property_callbacks::Dict{String,<:ShadowDocumentPropertyUpdateCallback},
         shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback,
         shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback,
-    ) where {T}
-        if T <: AbstractDict
-            if !haskey(shadow_document, "version")
-                shadow_document["version"] = 1
-            end
-        elseif !hasproperty(shadow_document, :version)
-            error("The given shadow document type $T must have a property `version::Int` used for storing the \
-                shadow document version.")
-        elseif !ismutabletype(T)
-            error("The given shadow document type $T must be mutable.")
+        shadow_document_property_pre_update_funcs::Dict{String,<:ShadowDocumentPropertyPreUpdateFunction},
+    )
+        if !haskey(shadow_document, "version")
+            shadow_document["version"] = 1
         end
 
-        return new{T}(
+        return new(
             id,
             shadow_document_lock,
             shadow_client,
@@ -73,6 +89,7 @@ mutable struct ShadowFramework{T}
             shadow_document_property_callbacks,
             shadow_document_pre_update_callback,
             shadow_document_post_update_callback,
+            shadow_document_property_pre_update_funcs,
             CountDownLatch(1),
         )
     end
@@ -100,42 +117,48 @@ Arguments:
   - `connection (MQTTConnection)`: The connection.
   - `thing_name (String)`: Name of the Thing in AWS IoT under which the shadow document will exist.
   - `shadow_name (Union{String,Nothing})`: Shadow name for a named shadow document or `nothing` for an unnamed shadow document.
-  - `shadow_document (T)`: The local shadow document. This can be an `AbstractDict` or a mutable struct.
-    This must include keys/properties for all keys in the shadow documents published by the broker.
-    If this type is not an AbstractDict and is missing a property of the desired shadow document state, an error will
-    be logged and there will be a permanent difference between the reported and desired state.
-    This must also include a `version (Int)` key/property which will store the shadow document version.
-    It is recommended that you persist this to disk.
-    You can write the latest state to disk inside `shadow_document_post_update_callback`.
-    You should also then load it from disk and pass it as this parameter during the start of your application.
+  - `shadow_document (AbstractDict)`: The local shadow document. This must include all keys in the
+    shadow documents published by the broker. This must also include a `version (Int)` key which will store the
+    shadow document version. It is recommended that you persist this to disk. You can write the latest state to
+    disk inside `shadow_document_post_update_callback`. You should also then load it from disk and pass it as
+    this parameter during the start of your application.
   - `shadow_document_property_callbacks (Dict{String,ShadowDocumentPropertyUpdateCallback})`: An optional set of
     callbacks. A given callback will be fired for each update to the shadow document property matching the given key.
     Note that the callback is fired only when shadow properties are changed.
     A shadow property change occurs when the value of the shadow property is changed to a new value which is not
     equal to the prior value.
     This is implemented using `!isequal()`.
-    Please ensure a satisfactory definition (satifactory to your application's needs) of `isequal` for all types
+    Please ensure a satisfactory definition (satisfactory to your application's needs) of `isequal` for all types
     used in the shadow document.
     You will only need to worry about this if you are using custom JSON deserialization.
   - `shadow_document_pre_update_callback (ShadowDocumentPreUpdateCallback)`: An optional callback which will be fired immediately before updating any shadow document properties. This is always fired, even if no shadow properties will be changed.
   - `shadow_document_post_update_callback (ShadowDocumentPostUpdateCallback)`: An optional callback which will be fired immediately after updating any shadow document properties. This is fired only if shadow properties were changed.
+  - `shadow_document_property_pre_update_funcs (Dict{String,ShadowDocumentPropertyPreUpdateFunction})`: An optional set of functions which customize the update behavior of certain shadow document properties. See [`ShadowDocumentPropertyPreUpdateFunction`](@ref) for more information.
   - `id (Int)`: A unique ID which disambiguates log messages from multiple shadow frameworks.
 
 See also [`ShadowDocumentPropertyUpdateCallback`](@ref), [`ShadowDocumentPreUpdateCallback`](@ref), [`ShadowDocumentPostUpdateCallback`](@ref), [`MQTTConnection`](@ref).
+
+    !!! note "Limitations"
+        Removing properties by setting their desired value to `null` is not currently supported. AWS IoT will remove
+        that `null` property from the desired state, but the property will remain in the reported state.
 """
 function ShadowFramework(
     connection::MQTTConnection,
     thing_name::String,
     shadow_name::Union{String,Nothing},
-    shadow_document::T;
-    shadow_document_property_callbacks::Dict{String,ShadowDocumentPropertyUpdateCallback} = Dict{
+    shadow_document::AbstractDict;
+    shadow_document_property_callbacks::Dict{String,<:ShadowDocumentPropertyUpdateCallback} = Dict{
         String,
         ShadowDocumentPropertyUpdateCallback,
     }(),
     shadow_document_pre_update_callback::ShadowDocumentPreUpdateCallback = v -> nothing,
     shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback = v -> nothing,
+    shadow_document_property_pre_update_funcs::Dict{String,<:ShadowDocumentPropertyPreUpdateFunction} = Dict{
+        String,
+        ShadowDocumentPropertyPreUpdateFunction,
+    }(),
     id = 1,
-) where {T}
+)
     return ShadowFramework(
         id,
         ReentrantLock(),
@@ -144,6 +167,7 @@ function ShadowFramework(
         shadow_document_property_callbacks,
         shadow_document_pre_update_callback,
         shadow_document_post_update_callback,
+        shadow_document_property_pre_update_funcs,
     )
 end
 
@@ -176,7 +200,7 @@ Returns the [`ShadowClient`](@ref) for `sf`.
 shadow_client(sf::ShadowFramework) = sf._shadow_client
 
 """
-    subscribe(sf::ShadowFramework{T}) where {T}
+    subscribe(sf::ShadowFramework)
 
 Subscribes to the shadow document's topics and begins processing updates.
 The `sf` is always locked before reading/writing from/to the shadow document.
@@ -187,7 +211,7 @@ You can call `wait_until_synced(sf)` if you need to wait until this synchronizat
 
 $publish_return_docs
 """
-function subscribe(sf::ShadowFramework{T}) where {T}
+function subscribe(sf::ShadowFramework)
     sf._sync_latch = CountDownLatch(1)
     callback = _create_sf_callback(sf)
     task, id = subscribe(sf._shadow_client, AWS_MQTT_QOS_AT_LEAST_ONCE, callback)
@@ -202,7 +226,7 @@ function subscribe(sf::ShadowFramework{T}) where {T}
 end
 
 """
-    unsubscribe(sf::ShadowFramework{T}) where {T}
+    unsubscribe(sf::ShadowFramework)
 
 Unsubscribes from the shadow document's topics and stops processing updates.
 After calling this, `wait_until_synced(sf)` will again block until the first publish in response to
@@ -210,11 +234,13 @@ calling `subscribe(sf)`.
 
 $_iot_shadow_unsubscribe_return_docs
 """
-function unsubscribe(sf::ShadowFramework{T}) where {T}
+function unsubscribe(sf::ShadowFramework)
     return unsubscribe(sf._shadow_client)
 end
 
 """
+    publish_current_state(sf::ShadowFramework; include_version::Bool = true)
+
 Publishes the current state of the shadow document.
 
 Arguments:
@@ -222,7 +248,7 @@ Arguments:
 
 $publish_return_docs
 """
-function publish_current_state(sf::ShadowFramework{T}; include_version::Bool = true) where {T}
+function publish_current_state(sf::ShadowFramework; include_version::Bool = true)
     current_state = _create_reported_state_payload(sf; include_version)
     @debug "SF-$(sf._id): publishing shadow update" current_state
     return publish(sf._shadow_client, "/update", current_state, AWS_MQTT_QOS_AT_LEAST_ONCE)
@@ -255,7 +281,7 @@ function wait_until_synced(f::Function, sf::ShadowFramework)
     return nothing
 end
 
-function _create_sf_callback(sf::ShadowFramework{T}) where {T}
+function _create_sf_callback(sf::ShadowFramework)
     return function shadow_callback(
         shadow_client::ShadowClient,
         topic::String,
@@ -268,7 +294,7 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
         if endswith(topic, "/get/accepted")
             # process any delta state from when we last reported our current state. if something changed, report our
             # current state again. there's a chance the delta state is permanent due to the user's configuration
-            # (isequals implementation, struct definition, etc.). we need to avoid endless communications.
+            # (isequals implementation, etc.). we need to avoid endless communications.
             updated = _update_local_shadow_from_get!(sf, payload)
             if updated
                 publish_current_state(sf)
@@ -287,7 +313,7 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
             # and publish our new state
             updated = _update_local_shadow_from_delta!(sf, payload)
             # we still need to check updated here, because there's a chance the delta state is permanent due to the
-            # user's configuration (isequals implementation, struct definition, etc.). we need to avoid endless communications.
+            # user's configuration (isequals implementation, etc.). we need to avoid endless communications.
             if updated
                 publish_current_state(sf)
             else
@@ -304,12 +330,12 @@ function _create_sf_callback(sf::ShadowFramework{T}) where {T}
 end
 
 """
-    _update_local_shadow_from_get!(sf::ShadowFramework{T}, payload_str::String) where {T}
+    _update_local_shadow_from_get!(sf::ShadowFramework, payload_str::String)
 
 Performs a local shadow update using the delta state from a /get/accepted document.
 Returns `true` if the local shadow was updated.
 """
-function _update_local_shadow_from_get!(sf::ShadowFramework{T}, payload_str::String) where {T}
+function _update_local_shadow_from_get!(sf::ShadowFramework, payload_str::String)
     payload = JSON.parse(payload_str)
     version = get(payload, "version", nothing)
     return lock(sf) do
@@ -317,9 +343,20 @@ function _update_local_shadow_from_get!(sf::ShadowFramework{T}, payload_str::Str
             _set_version!(sf._shadow_document, version)
             state = get(payload, "state", nothing)
             if state !== nothing
+                # first sync with the previously reported state to ensure that if our local copy and what was previously
+                # reported somehow got out of sync, we can catch up even if there is no delta state
+                reported = get(state, "reported", nothing)
                 delta = get(state, "delta", nothing)
-                if delta !== nothing
-                    return _do_local_shadow_update!(sf, delta)
+                if reported !== nothing
+                    # also sync with the delta state to avoid having multiple shadow updates
+                    if delta !== nothing
+                        _recursive_merge!(reported, delta)
+                    end
+                    return _do_local_shadow_update!(sf, reported)
+                else
+                    if delta !== nothing
+                        return _do_local_shadow_update!(sf, delta)
+                    end
                 end
             end
         else
@@ -329,13 +366,26 @@ function _update_local_shadow_from_get!(sf::ShadowFramework{T}, payload_str::Str
     end
 end
 
+function _recursive_merge!(d::AbstractDict, other::AbstractDict)
+    for (k, v) in other
+        if haskey(d, k)
+            d[k] = _recursive_merge!(d[k], v)
+        else
+            d[k] = v
+        end
+    end
+    return d
+end
+
+_recursive_merge!(d, other) = other
+
 """
-    _update_local_shadow_from_delta!(sf::ShadowFramework{T}, payload_str::String) where {T}
+    _update_local_shadow_from_delta!(sf::ShadowFramework, payload_str::String)
 
 Performs a local shadow update using the delta state from an /update/delta document.
 Returns `true` if the local shadow was updated.
 """
-function _update_local_shadow_from_delta!(sf::ShadowFramework{T}, payload_str::String) where {T}
+function _update_local_shadow_from_delta!(sf::ShadowFramework, payload_str::String)
     payload = JSON.parse(payload_str)
     version = get(payload, "version", nothing)
     return lock(sf) do
@@ -353,21 +403,21 @@ function _update_local_shadow_from_delta!(sf::ShadowFramework{T}, payload_str::S
 end
 
 """
-    _do_local_shadow_update!(sf::ShadowFramework{T}, state::Dict{String,<:Any}) where {T}
+    _do_local_shadow_update!(sf::ShadowFramework, state::Dict{String,<:Any})
 
  1. Fires the pre-update callback
  2. Updates each shadow property from `state` and fires its callback if an update occured
  3. Fires the post-update callback
  4. Returns `true` if any updated occured.
 """
-function _do_local_shadow_update!(sf::ShadowFramework{T}, state::Dict{String,<:Any}) where {T}
+function _do_local_shadow_update!(sf::ShadowFramework, state::Dict{String,<:Any})
     return lock(sf) do
         _fire_pre_update_callback(sf, state)
         any_updates = false
         for (k, v) in state
-            updated = _update_shadow_property!(sf, k, v)
+            updated = _update_shadow_property!(sf, sf._shadow_document, k, v)
             if updated
-                _fire_callback(sf, k, v)
+                _fire_callback(sf, k, sf._shadow_document[k])
                 any_updates = true
             end
         end
@@ -376,7 +426,7 @@ function _do_local_shadow_update!(sf::ShadowFramework{T}, state::Dict{String,<:A
     end
 end
 
-function _fire_pre_update_callback(sf::ShadowFramework{T}, state::Dict{String,<:Any}) where {T}
+function _fire_pre_update_callback(sf::ShadowFramework, state::Dict{String,<:Any})
     try
         sf._shadow_document_pre_update_callback(state)
     catch ex
@@ -385,7 +435,7 @@ function _fire_pre_update_callback(sf::ShadowFramework{T}, state::Dict{String,<:
     return nothing
 end
 
-function _fire_post_update_callback(sf::ShadowFramework{T}) where {T}
+function _fire_post_update_callback(sf::ShadowFramework)
     try
         sf._shadow_document_post_update_callback(sf._shadow_document)
     catch ex
@@ -394,7 +444,7 @@ function _fire_post_update_callback(sf::ShadowFramework{T}) where {T}
     return nothing
 end
 
-function _fire_callback(sf::ShadowFramework{T}, key::String, value) where {T}
+function _fire_callback(sf::ShadowFramework, key::String, value)
     if haskey(sf._shadow_document_property_callbacks, key)
         callback = sf._shadow_document_property_callbacks[key]
         try
@@ -407,7 +457,7 @@ function _fire_callback(sf::ShadowFramework{T}, key::String, value) where {T}
     return nothing
 end
 
-function _create_reported_state_payload(sf::ShadowFramework{T}; include_version = true) where {T}
+function _create_reported_state_payload(sf::ShadowFramework; include_version = true)
     return lock(sf) do
         d = Dict()
         d["state"] = Dict("reported" => Dict(_get_shadow_property_pairs(sf._shadow_document)))
@@ -420,64 +470,38 @@ end
 
 _get_shadow_property_pairs(doc::AbstractDict) = filter(it -> it[1] != "version", collect(doc))
 
-function _get_shadow_property_pairs(doc::T) where {T}
-    names = fieldnames(T)
-    out = Vector{Pair{String,Any}}(undef, length(names) - 1)
-    for i in eachindex(names)
-        fieldname = names[i]
-        if fieldname != :version
-            out[i] = String(fieldname) => getfield(doc, fieldname)
-        end
-    end
-    return out
-end
-
 """
-    _update_shadow_property!(sf::ShadowFramework{<:AbstractDict}, key::String, value)
+    _update_shadow_property!(sf::ShadowFramework, doc::AbstractDict, key::String, value)
 
 Updates the shadow property if the new `value` is not equal to the current value at the `key`.
+If the `value` is an `AbstractDict`, it is merged into the `doc` instead of overwriting the `key`.
 Returns `true` if an update occured.
 """
-function _update_shadow_property!(sf::ShadowFramework{<:AbstractDict}, key::String, value)
-    if haskey(sf._shadow_document, key)
-        if !isequal(sf._shadow_document[key], value)
-            sf._shadow_document[key] = value
-            return true
+function _update_shadow_property!(sf::ShadowFramework, doc::AbstractDict, key::String, value)
+    return if haskey(sf._shadow_document_property_pre_update_funcs, key)
+        sf._shadow_document_property_pre_update_funcs[key](doc, key, value)
+    elseif value isa AbstractDict
+        updated = false
+        for (k, v) in collect(value)
+            updated |= _update_shadow_property!(sf, doc[key], k, v)
         end
+        updated
     else
-        sf._shadow_document[key] = value
-        return true
-    end
-    return false
-end
-
-"""
-    _update_shadow_property!(sf::ShadowFramework{<:Any}, key::String, value)
-
-Updates the shadow property if the new `value` is not equal to the current value at the `key`.
-Returns `true` if an update occured.
-"""
-function _update_shadow_property!(sf::ShadowFramework{<:Any}, key::String, value)
-    try
-        sym = Symbol(key)
-        v = getproperty(sf._shadow_document, sym)
-        if !isequal(v, value)
-            setproperty!(sf._shadow_document, sym, value)
-            return true
+        if !haskey(doc, key) || !isequal(doc[key], value)
+            doc[key] = value
+            true
+        else
+            false
         end
-    catch ex
-        @error "SF-$(sf._id): failed to update shadow property key=$key value=$value (you probably need to extend \
-            your struct type with an additional property for this key)" exception = (ex, catch_backtrace())
     end
-    return false
 end
 
 """
-    _sync_version!(doc::T, payload_str::String) where {T}
+    _sync_version!(doc::AbstractDict, payload_str::String)
 
 Updates the local shadow's version number using the version in the `payload`.
 """
-function _sync_version!(doc::T, payload_str::String) where {T}
+function _sync_version!(doc::AbstractDict, payload_str::String)
     payload = JSON.parse(payload_str)
     version = get(payload, "version", nothing)
     if _version_allows_update(doc, version)
@@ -486,8 +510,8 @@ function _sync_version!(doc::T, payload_str::String) where {T}
     return nothing
 end
 
-_version_allows_update(doc::T, version::Int) where {T} = version >= _version(doc)
-_version_allows_update(doc::T, version::Nothing) where {T} = false
+_version_allows_update(doc::AbstractDict, version::Int) = version >= _version(doc)
+_version_allows_update(doc::AbstractDict, version::Nothing) = false
 
 _version(doc::AbstractDict) = doc["version"]
 _version(doc) = doc.version
