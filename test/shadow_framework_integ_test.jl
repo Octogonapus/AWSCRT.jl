@@ -712,4 +712,84 @@ end
             fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1])
         end
     end
+
+    @testset "the pre-update function can be used for the parents of nested properties" begin
+        connection = new_mqtt_connection()
+        shadow_name = random_shadow_name()
+        doc = Dict("foo" => Dict("bar" => 1))
+        bar_latch = CountDownLatch(1)
+
+        sf = ShadowFramework(
+            connection,
+            THING1_NAME,
+            shadow_name,
+            doc;
+            shadow_document_property_pre_update_funcs = Dict(
+                "foo" => (doc, k, v) -> begin
+                    doc[k] = Dict("bar" => 3)
+                    return true
+                end,
+                "bar" => (doc, k, v) -> begin
+                    count_down(bar_latch)
+                    error("this should not run")
+                end,
+            ),
+        )
+        sc = shadow_client(sf)
+
+        msgs = []
+        function shadow_callback(
+            shadow_client::ShadowClient,
+            topic::String,
+            payload::String,
+            dup::Bool,
+            qos::aws_mqtt_qos,
+            retain::Bool,
+        )
+            push!(msgs, (; shadow_client, topic, payload, dup, qos, retain))
+        end
+
+        oobc = new_mqtt_connection()
+        oobsc = OOBShadowClient(oobc, THING1_NAME, shadow_name)
+
+        update_msgs = []
+        task, id = subscribe(
+            oobsc.shadow_client,
+            "/update",
+            AWS_MQTT_QOS_AT_LEAST_ONCE,
+            (topic::String, payload::String, dup::Bool, qos::aws_mqtt_qos, retain::Bool) ->
+                push!(update_msgs, (; topic, payload, dup, qos, retain)),
+        )
+        fetch(task)
+
+        try
+            # make the remote shadow different from the local one to cause a sync on the first subscribe
+            @info "publishing out of band /update"
+            fetch(
+                publish(
+                    oobsc.shadow_client,
+                    "/update",
+                    json(Dict("state" => Dict("reported" => Dict("foo" => Dict("bar" => 2))))),
+                    AWS_MQTT_QOS_AT_LEAST_ONCE,
+                )[1],
+            )
+            wait_for(() -> length(update_msgs) >= 2)
+
+            @info "subscribing"
+            wait_until_synced(sf) do
+                fetch(subscribe(sf)[1])
+            end
+
+            # the pre-update function should have ran and changed the nested property foo.bar
+            @test doc == Dict("foo" => Dict("bar" => 3), "version" => 2)
+            @test get_count(bar_latch) == 1
+
+            @info "unsubscribing"
+            fetch(unsubscribe(sf)[1])
+            @info "done unsubscribing"
+            fetch(unsubscribe(oobsc.shadow_client)[1])
+        finally
+            fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1])
+        end
+    end
 end

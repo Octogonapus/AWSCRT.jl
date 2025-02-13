@@ -478,22 +478,20 @@ If the `value` is an `AbstractDict`, it is merged into the `doc` instead of over
 Returns `true` if an update occured.
 """
 function _update_shadow_property!(sf::ShadowFramework, doc::AbstractDict, key::String, value)
-    return if value isa AbstractDict
+    return if haskey(sf._shadow_document_property_pre_update_funcs, key)
+        sf._shadow_document_property_pre_update_funcs[key](doc, key, value)
+    elseif value isa AbstractDict
         updated = false
         for (k, v) in collect(value)
             updated |= _update_shadow_property!(sf, doc[key], k, v)
         end
         updated
     else
-        if haskey(sf._shadow_document_property_pre_update_funcs, key)
-            sf._shadow_document_property_pre_update_funcs[key](doc, key, value)
+        if !haskey(doc, key) || !isequal(doc[key], value)
+            doc[key] = value
+            true
         else
-            if !haskey(doc, key) || !isequal(doc[key], value)
-                doc[key] = value
-                true
-            else
-                false
-            end
+            false
         end
     end
 end
