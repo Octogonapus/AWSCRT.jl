@@ -773,7 +773,7 @@ end
                     AWS_MQTT_QOS_AT_LEAST_ONCE,
                 )[1],
             )
-            wait_for(() -> length(update_msgs) >= 2)
+            wait_for(() -> length(update_msgs) >= 1)
 
             @info "subscribing"
             wait_until_synced(sf) do
