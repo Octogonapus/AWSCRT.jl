@@ -35,6 +35,10 @@ const _C_ON_SUBSCRIBE_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
 const _C_ON_UNSUBSCRIBE_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
 const _C_ON_RESUBSCRIBE_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
 const _C_ON_PUBLISH_COMPLETE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_AWS_MALLOC = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_AWS_FREE = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_AWS_REALLOC = Ref{Ptr{Cvoid}}(C_NULL)
+const _C_AWS_CALLOC = Ref{Ptr{Cvoid}}(C_NULL)
 
 function _release(; include_mem_tracer = isempty(get(ENV, "AWS_CRT_MEMORY_TRACING", "")))
     aws_thread_set_managed_join_timeout_ns(5e8) # 0.5 seconds
@@ -60,6 +64,8 @@ const advanced_use_note =
     "Note on advanced use: the internal constructor on this struct has been left at its " *
     "default so that you can bring your own native data if you need to. However, you are then responsible for the " *
     "memory management of that data."
+
+include("allocator.jl")
 
 include("AWSIO.jl")
 export EventLoopGroup
@@ -139,6 +145,10 @@ function __init__()
     )
     _C_ON_PUBLISH_COMPLETE[] =
         @cfunction(_c_on_publish_complete, Cvoid, (Ptr{aws_mqtt_client_connection}, Cuint, Cint, Ptr{Cvoid}))
+    _C_AWS_MALLOC[] = @cfunction(_c_aws_malloc, Ptr{Cvoid}, (Ptr{aws_allocator}, Csize_t))
+    _C_AWS_FREE[] = @cfunction(_c_aws_free, Cvoid, (Ptr{aws_allocator}, Ptr{Cvoid}))
+    _C_AWS_REALLOC[] = @cfunction(_c_aws_realloc, Ptr{Cvoid}, (Ptr{aws_allocator}, Ptr{Cvoid}, Csize_t, Csize_t))
+    _C_AWS_CALLOC[] = @cfunction(_c_aws_calloc, Ptr{Cvoid}, (Ptr{aws_allocator}, Csize_t, Csize_t))
 
     _AWSCRT_ALLOCATOR[] = let level = get(ENV, "AWS_CRT_MEMORY_TRACING", "")
         if !isempty(level)
@@ -152,6 +162,8 @@ function __init__()
             end
             frames_per_stack = parse(Int, strip(get(ENV, "AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK", "0")))
             aws_mem_tracer_new(aws_default_allocator(), C_NULL, level, frames_per_stack)
+        elseif get(ENV, "AWS_CRT_USE_JL_ALLOCATOR", "") == "true"
+            new_jl_allocator()
         else
             aws_default_allocator()
         end
