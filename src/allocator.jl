@@ -22,7 +22,7 @@ end
 """
     new_jl_allocator()
 
-Returns an [`aws_allocator`](@ref) which integrates with Julia's GC to track memory allocated by native code.
+Returns an `aws_allocator` which integrates with Julia's GC to track memory allocated by native code.
 """
 function new_jl_allocator()
     return aws_allocator(_C_AWS_MALLOC[], _C_AWS_FREE[], _C_AWS_REALLOC[], _C_AWS_CALLOC[], C_NULL)
