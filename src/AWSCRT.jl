@@ -162,7 +162,7 @@ function __init__()
             end
             frames_per_stack = parse(Int, strip(get(ENV, "AWS_CRT_MEMORY_TRACING_FRAMES_PER_STACK", "0")))
             aws_mem_tracer_new(aws_default_allocator(), C_NULL, level, frames_per_stack)
-        elseif Base.get_bool_env("AWS_CRT_USE_JL_ALLOCATOR", false)
+        elseif get(ENV, "AWS_CRT_USE_JL_ALLOCATOR", "") == "true"
             new_jl_allocator()
         else
             aws_default_allocator()
