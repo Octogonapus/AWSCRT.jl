@@ -211,12 +211,28 @@ end
     @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
 end
 
+@testset "_update_local_shadow_from_get! ignores an old version in the reported state" begin
+    doc = EXAMPLE_SD_1_DICT
+    doc_copy = deepcopy(doc)
+    sf = empty_shadow_framework(doc_copy)
+    @test AWSCRT._update_local_shadow_from_get!(
+        sf,
+        json(Dict("state" => Dict("delta" => Dict("foo" => 2), "reported" => Dict("version" => 1)), "version" => 3)),
+    )
+    @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
+    @test doc_copy["version"] == 3
+end
+
 @testset "_update_local_shadow_from_delta!" begin
     doc = EXAMPLE_SD_1_DICT
     doc_copy = deepcopy(doc)
     sf = empty_shadow_framework(doc_copy)
-    @test AWSCRT._update_local_shadow_from_delta!(sf, json(Dict("state" => Dict("foo" => 2), "version" => 3)))
+    @test AWSCRT._update_local_shadow_from_delta!(
+        sf,
+        json(Dict("state" => Dict("foo" => 2, "version" => 1), "version" => 3)),
+    )
     @test are_shadow_states_equal_without_version(doc_copy, Dict("foo" => 2, "bar" => "a"))
+    @test doc_copy["version"] == 3
 end
 
 @testset "out of order messages, version is respected" for update_type in [:get_accepted, :delta]

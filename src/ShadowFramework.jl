@@ -353,6 +353,7 @@ function _update_local_shadow_from_get!(sf::ShadowFramework, payload_str::String
                     if delta !== nothing
                         _recursive_merge!(reported, delta)
                     end
+                    delete!(reported, "version") # ignore the old reported version because we get a new one from the broker
                     return _do_local_shadow_update!(sf, reported)
                 else
                     if delta !== nothing
@@ -393,6 +394,7 @@ function _update_local_shadow_from_delta!(sf::ShadowFramework, payload_str::Stri
         if _version_allows_update(sf._shadow_document, version)
             _set_version!(sf._shadow_document, version)
             state = get(payload, "state", nothing)
+            delete!(state, "version") # ignore the old reported version because we get a new one from the broker
             if state !== nothing
                 return _do_local_shadow_update!(sf, state)
             end
