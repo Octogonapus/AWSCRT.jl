@@ -515,7 +515,5 @@ _version_allows_update(doc::AbstractDict, version::Int) = version >= _version(do
 _version_allows_update(doc::AbstractDict, version::Nothing) = false
 
 _version(doc::AbstractDict) = doc["version"]
-_version(doc) = doc.version
 
 _set_version!(doc::AbstractDict, version::Int) = doc["version"] = version
-_set_version!(doc, version::Int) = doc.version = version
