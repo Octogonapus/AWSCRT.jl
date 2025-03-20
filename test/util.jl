@@ -42,8 +42,8 @@ function new_tls_ctx()
     return ClientTLSContext(tls_ctx_options)
 end
 
-function new_mqtt_connection()
-    client = MQTTClient(new_tls_ctx())
+function new_mqtt_connection(; tls = new_tls_ctx())
+    client = MQTTClient(tls)
     connection = MQTTConnection(client)
     client_id = random_client_id()
     @show client_id
