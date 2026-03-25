@@ -1,0 +1,34 @@
+name: zizmor
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8 # v0.5.2
+        with:
+          inputs: "."
+          min-severity: high
+          min-confidence: high
+          version: 1.23.1 # zizmor maintains a static map of version hashes so this is actually pinned https://github.com/zizmorcore/zizmor-action/blob/main/support/versions
+          advanced-security: false # print to console instead of uploading a SARIF
+          fail-on-no-inputs: true

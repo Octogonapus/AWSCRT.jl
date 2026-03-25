@@ -12,6 +12,7 @@ jobs:
   test:
     name: test ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -23,25 +24,30 @@ jobs:
           # - macOS-latest
         arch:
           - x64
+
     permissions:
       id-token: write # for OIDC
       contents: read # to clone
+
     env:
       AWS_DEFAULT_REGION: us-east-1
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: julia-actions/setup-julia@v1
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
 
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@e97f6fc1a6e21c82253c85e269be7340376aa425 # v3.0.1
 
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-buildpkg@e3eb439fad4f9aba7da2667e7510e4a46ebc46e1 # v1.7.0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           role-to-assume: arn:aws:iam::533267155197:role/AWSCRT-OIDC
           role-session-name: awscrt-test
@@ -49,7 +55,7 @@ jobs:
           aws-region: ${{ env.AWS_DEFAULT_REGION }}
 
       - name: Run regular tests
-        uses: julia-actions/julia-runtest@v1
+        uses: julia-actions/julia-runtest@d60b785c6f2bdf4ebfb18b2b6f7d93b7dfb0efe3 # v1.11.4
         env:
           ENDPOINT: ${{ secrets.ENDPOINT }}
           CERT_STRING: ${{ secrets.CERT_STRING }}
@@ -66,9 +72,9 @@ jobs:
           NTIMES=50
           julia -t $NTHREADS test/run_parallel_commands.jl $NTIMES julia -t 2 --project -e 'using Pkg; Pkg.test()'
 
-      - uses: julia-actions/julia-processcoverage@v1
+      - uses: julia-actions/julia-processcoverage@03114f09f119417c3242a9fb6e0b722676aedf38 # v1.2.2
 
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           file: ./lcov.info
           fail_ci_if_error: false
@@ -93,23 +99,25 @@ jobs:
     env:
       AWS_DEFAULT_REGION: us-east-1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
 
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@e97f6fc1a6e21c82253c85e269be7340376aa425 # v3.0.1
 
-      - uses: julia-actions/julia-downgrade-compat@v1
+      - uses: julia-actions/julia-downgrade-compat@00f940b7be2b50389571ed016d603be561649103 # v2.2.2
         with:
           skip: Dates, Random, Test
 
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-buildpkg@e3eb439fad4f9aba7da2667e7510e4a46ebc46e1 # v1.7.0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           role-to-assume: arn:aws:iam::533267155197:role/AWSCRT-OIDC
           role-session-name: awscrt-test
@@ -117,15 +125,15 @@ jobs:
           aws-region: ${{ env.AWS_DEFAULT_REGION }}
 
       - name: Run regular tests
-        uses: julia-actions/julia-runtest@v1
+        uses: julia-actions/julia-runtest@d60b785c6f2bdf4ebfb18b2b6f7d93b7dfb0efe3 # v1.11.4
         env:
           ENDPOINT: ${{ secrets.ENDPOINT }}
           CERT_STRING: ${{ secrets.CERT_STRING }}
           PRI_KEY_STRING: ${{ secrets.PRI_KEY_STRING }}
 
-      - uses: julia-actions/julia-processcoverage@v1
+      - uses: julia-actions/julia-processcoverage@03114f09f119417c3242a9fb6e0b722676aedf38 # v1.2.2
 
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           file: ./lcov.info
           fail_ci_if_error: false
@@ -145,16 +153,18 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
 
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@e97f6fc1a6e21c82253c85e269be7340376aa425 # v3.0.1
 
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-buildpkg@e3eb439fad4f9aba7da2667e7510e4a46ebc46e1 # v1.7.0
 
       - run: |
           julia --project -e 'import Pkg; Pkg.develop(path=".."); Pkg.instantiate(); Pkg.build();'
