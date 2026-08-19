@@ -28,6 +28,10 @@ end)
             include("interrupt_connection.jl")
         end
     end
+    @testset "connect_callbacks_test.jl" begin
+        @info "Starting connect_callbacks_test.jl"
+        include("connect_callbacks_test.jl")
+    end
     @testset "mqtt_test.jl" begin
         @info "Starting mqtt_test.jl"
         include("mqtt_test.jl")

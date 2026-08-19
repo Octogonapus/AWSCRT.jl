@@ -411,30 +411,32 @@ function connect(
         )
     end
 
-    # this ud must persist until the connection is closed
+    # this ud must persist until the connection is closed.
     on_connection_interrupted_ud, on_connection_interrupted_udp = if on_connection_interrupted !== nothing
-        ud = _OnConnectionInterruptedUserData(connection.events, on_connection_interrupted, connection)
-        udp = Base.pointer_from_objref(ud)
-        lock(_C_IDS_LOCK) do
-            # TODO we leak these refs, they are never freed
-            _C_IDS[ud] = nothing
-            _C_IDS[udp] = nothing
+        let ud = _OnConnectionInterruptedUserData(connection.events, on_connection_interrupted, connection)
+            udp = Base.pointer_from_objref(ud)
+            lock(_C_IDS_LOCK) do
+                # TODO we leak these refs, they are never freed
+                _C_IDS[ud] = nothing
+                _C_IDS[udp] = nothing
+            end
+            ud, udp
         end
-        ud, udp
     else
         C_NULL, C_NULL
     end
 
     # this ud must persist until the connection is closed
     on_connection_resumed_ud, on_connection_resumed_udp = if on_connection_resumed !== nothing
-        ud = _OnConnectionResumedUserData(connection.events, on_connection_resumed, connection)
-        udp = Base.pointer_from_objref(ud)
-        lock(_C_IDS_LOCK) do
-            # TODO we leak these refs, they are never freed
-            _C_IDS[ud] = nothing
-            _C_IDS[udp] = nothing
+        let ud = _OnConnectionResumedUserData(connection.events, on_connection_resumed, connection)
+            udp = Base.pointer_from_objref(ud)
+            lock(_C_IDS_LOCK) do
+                # TODO we leak these refs, they are never freed
+                _C_IDS[ud] = nothing
+                _C_IDS[udp] = nothing
+            end
+            ud, udp
         end
-        ud, udp
     else
         C_NULL, C_NULL
     end
