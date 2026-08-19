@@ -12,6 +12,20 @@ mutable struct EventLoopGroup
     ptr::Ptr{aws_event_loop_group}
 end
 
+function _default_aws_socket_options()
+    return aws_socket_options(
+        AWS_SOCKET_STREAM,
+        AWS_SOCKET_IPV6,
+        AWS_SOCKET_IMPL_PLATFORM_DEFAULT,
+        UInt32(5000),
+        UInt16(0),
+        UInt16(0),
+        UInt16(0),
+        false,
+        ntuple(_ -> Cchar(0), 16),
+    )
+end
+
 """
     EventLoopGroup(num_threads::Union{Int,Nothing} = nothing, cpu_group::Union{Int,Nothing} = nothing)
 
