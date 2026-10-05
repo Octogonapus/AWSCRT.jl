@@ -329,9 +329,12 @@ function _create_sf_callback(sf::ShadowFramework)
                 count_down(sf._sync_latch)
             end
         elseif endswith(topic, "/update/accepted")
-            # our update was accepted, which means the broker incremented the version number. we need to use the new
-            # version number before publishing a new update or it will be rejected. sync to pull in the new version number
-            _sync_version!(sf._shadow_document, payload)
+            # the broker publishes this for every writer's accepted update, not only ours, and each one increments the
+            # version number. we need to use the new version number before publishing a new update or it will be
+            # rejected.
+            lock(sf) do
+                _sync_version!(sf._shadow_document, payload)
+            end
             count_down(sf._sync_latch)
         elseif endswith(topic, "/update/rejected")
             # a 409 means another writer bumped the version before our update landed, so the broker's reported state
