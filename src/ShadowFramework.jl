@@ -66,6 +66,7 @@ mutable struct ShadowFramework
     const _shadow_document_post_update_callback::ShadowDocumentPostUpdateCallback
     const _shadow_document_property_pre_update_funcs::Dict{String,ShadowDocumentPropertyPreUpdateFunction}
     _sync_latch::CountDownLatch
+    _republish_on_next_get::Bool # guarded by _shadow_document_lock
 
     function ShadowFramework(
         id::Int,
@@ -91,6 +92,7 @@ mutable struct ShadowFramework
             shadow_document_post_update_callback,
             shadow_document_property_pre_update_funcs,
             CountDownLatch(1),
+            false,
         )
     end
 end
@@ -297,7 +299,12 @@ function _create_sf_callback(sf::ShadowFramework)
             # current state again. there's a chance the delta state is permanent due to the user's configuration
             # (isequals implementation, etc.). we need to avoid endless communications.
             updated = _update_local_shadow_from_get!(sf, payload)
-            if updated
+            republish = lock(sf) do
+                r = sf._republish_on_next_get
+                sf._republish_on_next_get = false
+                r
+            end
+            if updated || republish
                 publish_current_state(sf)
             else
                 # no update to do, we're already synced
@@ -322,10 +329,25 @@ function _create_sf_callback(sf::ShadowFramework)
                 count_down(sf._sync_latch)
             end
         elseif endswith(topic, "/update/accepted")
-            # our update was accepted, which means the broker incremented the version number. we need to use the new
-            # version number before publishing a new update or it will be rejected. sync to pull in the new version number
-            _sync_version!(sf._shadow_document, payload)
+            # the broker publishes this for every writer's accepted update, not only ours, and each one increments the
+            # version number. we need to use the new version number before publishing a new update or it will be
+            # rejected.
+            lock(sf) do
+                _sync_version!(sf._shadow_document, payload)
+            end
             count_down(sf._sync_latch)
+        elseif endswith(topic, "/update/rejected")
+            # a 409 means another writer bumped the version before our update landed, so the broker's reported state
+            # may now be stale. nothing guarantees a later delta will cause a republish: the broker may not send one,
+            # and if it does it may contain only values we've already applied. fetch the latest version and publish
+            # our current state once we have it.
+            if get(JSON.parse(payload), "code", nothing) == 409
+                @debug "SF-$(sf._id): update rejected due to a version conflict, resyncing"
+                lock(sf) do
+                    sf._republish_on_next_get = true
+                end
+                publish(sf._shadow_client, "/get", "", AWS_MQTT_QOS_AT_LEAST_ONCE)
+            end
         end
     end
 end

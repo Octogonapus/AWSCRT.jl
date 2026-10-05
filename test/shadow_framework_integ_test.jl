@@ -798,3 +798,106 @@ end
         end
     end
 end
+
+topic_payloads(oobsc, suffix) = [JSON.parse(it.payload) for it in oobsc.msgs if endswith(it.topic, suffix)]
+
+reported_after_version(oobsc, version, expected) = any(
+    it -> it["version"] > version && all(((k, v),) -> maybe_get(it, "state", "reported", k) == v, expected),
+    topic_payloads(oobsc, "/update/accepted"),
+)
+
+delta_state_at_version(oobsc, version) =
+    [it["state"] for it in topic_payloads(oobsc, "/update/delta") if it["version"] == version]
+
+"""
+Reproduces a version conflict at version 3: the framework applies a delta setting `foo` to 2 and reports it, but another
+writer first publishes `conflicting_state` without a version, so the framework's report is rejected. `local_changes` are
+applied to the local document while the framework is stalled. Calls `check(doc, oobsc)` once the rejection is observed.
+"""
+function test_version_conflict(check, conflicting_state; local_changes = Dict{String,Any}())
+    connection = new_mqtt_connection()
+    shadow_name = random_shadow_name()
+    doc = Dict{String,Any}("foo" => 1, "bar" => 1)
+
+    sf = ShadowFramework(connection, THING1_NAME, shadow_name, doc)
+    sc = shadow_client(sf)
+
+    oobc = new_mqtt_connection()
+    oobsc = OOBShadowClient(oobc, THING1_NAME, shadow_name)
+    fetch(subscribe(oobsc.shadow_client, AWS_MQTT_QOS_AT_LEAST_ONCE, oobsc.shadow_callback)[1])
+
+    accepted_versions() = [it["version"] for it in topic_payloads(oobsc, "/update/accepted")]
+
+    try
+        wait_until_synced(sf) do
+            fetch(subscribe(sf)[1])
+        end
+        wait_for(() -> 1 in accepted_versions())
+
+        # holding the lock stalls the framework's message handling so we can reproduce the race deterministically
+        lock(sf) do
+            fetch(
+                publish(
+                    oobsc.shadow_client,
+                    "/update",
+                    json(Dict("state" => Dict("desired" => Dict("foo" => 2)))),
+                    AWS_MQTT_QOS_AT_LEAST_ONCE,
+                )[1],
+            )
+            wait_for(() -> 2 in accepted_versions())
+            doc["foo"] = 2
+            doc["version"] = 2
+            merge!(doc, local_changes)
+
+            fetch(
+                publish(
+                    oobsc.shadow_client,
+                    "/update",
+                    json(Dict("state" => conflicting_state)),
+                    AWS_MQTT_QOS_AT_LEAST_ONCE,
+                )[1],
+            )
+            wait_for(() -> 3 in accepted_versions())
+
+            fetch(publish_current_state(sf)[1])
+            wait_for(() -> !isempty(topic_payloads(oobsc, "/update/rejected")))
+        end
+
+        check(doc, oobsc)
+
+        fetch(unsubscribe(sf)[1])
+        fetch(unsubscribe(oobsc.shadow_client)[1])
+    finally
+        fetch(publish(sc, "/delete", "", AWS_MQTT_QOS_AT_LEAST_ONCE)[1])
+    end
+end
+
+@testset "reported state is republished after a version conflict followed by a delta of already applied values" begin
+    test_version_conflict(
+        Dict("desired" => Dict("bar" => 5), "reported" => Dict("bar" => 5));
+        local_changes = Dict{String,Any}("bar" => 5),
+    ) do doc, oobsc
+        wait_for(() -> reported_after_version(oobsc, 3, Dict("foo" => 2)), Timer(10))
+        @test delta_state_at_version(oobsc, 3) == [Dict("foo" => 2)]
+        @test doc["foo"] == 2
+        @test doc["bar"] == 5
+    end
+end
+
+@testset "reported state is republished after a version conflict followed by a delta of new values" begin
+    test_version_conflict(Dict("desired" => Dict("bar" => 5))) do doc, oobsc
+        wait_for(() -> reported_after_version(oobsc, 3, Dict("foo" => 2, "bar" => 5)), Timer(10))
+        @test delta_state_at_version(oobsc, 3) == [Dict("foo" => 2, "bar" => 5)]
+        @test doc["foo"] == 2
+        @test doc["bar"] == 5
+    end
+end
+
+@testset "local state is resynced after a version conflict followed by no delta" begin
+    # reverting desired to match the broker's reported state means the broker sends no delta for the conflicting write
+    test_version_conflict(Dict("desired" => Dict("foo" => 1))) do doc, oobsc
+        wait_for(() -> reported_after_version(oobsc, 3, Dict("foo" => 1)), Timer(10))
+        @test isempty(delta_state_at_version(oobsc, 3))
+        @test doc["foo"] == 1
+    end
+end
